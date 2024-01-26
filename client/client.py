@@ -5,7 +5,7 @@ import logging
 import speech_recognition as sr
 from utils.text_to_speech import text_to_speech
 from threading import Lock
-
+git
 logging.basicConfig(level=logging.DEBUG)
 
 # Replace 'MICROPHONE_INDEX' with the index of your microphone
@@ -48,19 +48,19 @@ async def handle_request(text):
 def get_audio():
     r = sr.Recognizer()
     mic = sr.Microphone(device_index=MICROPHONE_INDEX)
-    with mic as source:
-        print("Listening...")
-        r.adjust_for_ambient_noise(source)
-        try:
-           stop_listening = r.listen_in_background(source, speech_to_text)
-        except:
-            print('please say that again')
-            return get_audio()
+    print("Listening...")
+    try:
+        stop_listening = r.listen_in_background(mic, speech_to_text)
+    except:
+        print('please say that again')
+        return get_audio()
+    return stop_listening
 
 async def main():
-    get_audio()
+    stop_listening = get_audio()
     while True:
-        await asyncio.sleep(1)
+        if stop_listening is not None:
+            await asyncio.sleep(1)
         
 # Run the main function
 asyncio.run(main())
