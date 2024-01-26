@@ -5,7 +5,7 @@ import logging
 import speech_recognition as sr
 from utils.text_to_speech import text_to_speech
 from threading import Lock
-git
+
 logging.basicConfig(level=logging.DEBUG)
 
 # Replace 'MICROPHONE_INDEX' with the index of your microphone
@@ -14,20 +14,16 @@ MICROPHONE_INDEX = 1
 key_phrase = 'hey ava'
 suitable_voices = ['Rachel', 'Sarah', 'Matilda', 'Nicole']
 
-# Create a lock
-lock = Lock()
+async def speech_to_text(recognizer, audio):
+    try:
+        text = recognizer.recognize_google(audio).lower()
+        logging.info('Recognized: ' + text)
+        if key_phrase in text:
+            response = await handle_request(text.split(key_phrase, 1)[1])
+            text_to_speech(response['response']['content'], suitable_voices[1])
 
-def speech_to_text(recognizer, audio):
-    with lock:
-        try:
-            text = recognizer.recognize_google(audio).lower()
-            logging.info('Recognized: ' + text)
-            if key_phrase in text:
-                response = asyncio.run(handle_request(text.split(key_phrase, 1)[1]))
-                text_to_speech(response['response']['content'], suitable_voices[0])
-
-        except Exception as e:
-            logging.error('Voice not recognized: ' + str(e))
+    except Exception as e:
+        logging.error('Voice not recognized: ' + str(e))
 
 async def handle_request(text):
     data = {
@@ -45,22 +41,19 @@ async def handle_request(text):
             response = json.loads(await response.text())
             return response
         
-def get_audio():
-    r = sr.Recognizer()
-    mic = sr.Microphone(device_index=MICROPHONE_INDEX)
-    print("Listening...")
+async def get_speech():
     try:
-        stop_listening = r.listen_in_background(mic, speech_to_text)
-    except:
-        print('please say that again')
-        return get_audio()
-    return stop_listening
+        with sr.Microphone() as source:
+            r = sr.Recognizer()
+            audio = r.listen(source)
+            await speech_to_text(r, audio)
+    except sr.UnknownValueError:
+        print("No clue what you said, listening again... \n")
+        await get_speech()
 
 async def main():
-    stop_listening = get_audio()
-    while True:
-        if stop_listening is not None:
-            await asyncio.sleep(1)
+    await get_speech()
+    
         
 # Run the main function
 asyncio.run(main())
