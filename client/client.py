@@ -5,7 +5,7 @@ import logging
 import speech_recognition as sr
 from utils.text_to_speech import text_to_speech
 from threading import Lock
-git
+
 logging.basicConfig(level=logging.DEBUG)
 
 # Replace 'MICROPHONE_INDEX' with the index of your microphone
