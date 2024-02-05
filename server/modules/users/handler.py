@@ -32,19 +32,19 @@ class UserHandler:
             result = await app.db['users'].insert_one(new_user)
             new_user = await app.db['users'].find_one({'_id': result.inserted_id}, {'password': 0, 'tools': 0, 'message_history': 0})
             logger.info(f"User {new_user['username']} registered")
-            return {'success': 'User registered', 'user': {**new_user, '_id': str(new_user['_id'])}}, 201
+            return {'status': 'success', 'message': f"User {new_user['username']} registered", 'user': {**new_user, '_id': str(new_user['_id'])}}, 201
 
     async def login_user(self, data):
         if 'username' not in data or 'password' not in data:
-            return {'error': 'Missing credentials'}, 400
+            return {'status': 'bad request', 'message': 'Missing username or password'}, 400
 
         user = await app.db['users'].find_one({'username': data['username'].lower()})
         if not user:
-            return {'error': 'User not found'}, 404
+            return {'status': 'error', 'message': 'Incorrect username or password'}, 401
 
         if not bcrypt.checkpw(data['password'].encode('utf-8'), user['password']):
-            return {'error': 'Invalid password'}, 401
+            return {'status': 'error', 'message': 'Incorrect username or password'}, 401
 
         user.pop('password')
         logger.info(f"User {user['username']} logged in")
-        return {'success': f"User {user['username']} logged in", 'user': {**user, '_id': str(user['_id'])}}, 200
+        return {'status': 'success', 'message': f"User {user['username']} logged in", 'user': {**user, '_id': str(user['_id'])}}, 200

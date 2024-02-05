@@ -8,13 +8,20 @@ def get_logger(name, level="INFO"):
     logger = logging.getLogger(name)
     logger.setLevel(level)
 
-    handler = logging.FileHandler('app.log')
-    handler.setLevel(level)
+    # File handler
+    file_handler = logging.FileHandler('app.log')
+    file_handler.setLevel(level)
+
+    # Stream handler
+    stream_handler = logging.StreamHandler()
+    stream_handler.setLevel(level)  # Set level to DEBUG for console output
 
     formatter = logging.Formatter('%(asctime)s [%(levelname)s] - %(message)s')
-    handler.setFormatter(formatter)
+    file_handler.setFormatter(formatter)
+    stream_handler.setFormatter(formatter)  # Use the same formatter for the stream handler
 
-    logger.addHandler(handler)
+    logger.addHandler(file_handler)
+    logger.addHandler(stream_handler)  # Add the stream handler to the logger
 
     return logger
 
