@@ -1,4 +1,11 @@
+import os
 import logging
+
+class PathnameFilter(logging.Filter):
+    def filter(self, record):
+        pathname = record.pathname
+        record.folder = os.path.basename(os.path.dirname(pathname))
+        return True
 
 def get_logger(name, level="INFO"):
     level = logging.getLevelName(level.upper())
@@ -8,20 +15,23 @@ def get_logger(name, level="INFO"):
     logger = logging.getLogger(name)
     logger.setLevel(level)
 
-    # File handler
-    file_handler = logging.FileHandler('app.log')
+    file_handler = logging.FileHandler('server_debug.log')
     file_handler.setLevel(level)
 
-    # Stream handler
-    stream_handler = logging.StreamHandler()
-    stream_handler.setLevel(level)  # Set level to DEBUG for console output
+    # stream_handler = logging.StreamHandler()
+    # stream_handler.setLevel(level)
 
-    formatter = logging.Formatter('%(asctime)s [%(levelname)s] - %(message)s')
+    pathname_filter = PathnameFilter()
+    file_handler.addFilter(pathname_filter)
+    # stream_handler.addFilter(pathname_filter)
+
+    formatter = logging.Formatter('%(asctime)s [%(levelname)s] - %(folder)s/%(filename)s:%(lineno)d - %(message)s')
+    
     file_handler.setFormatter(formatter)
-    stream_handler.setFormatter(formatter)  # Use the same formatter for the stream handler
+    # stream_handler.setFormatter(formatter)
 
     logger.addHandler(file_handler)
-    logger.addHandler(stream_handler)  # Add the stream handler to the logger
+    # logger.addHandler(stream_handler)
 
     return logger
 

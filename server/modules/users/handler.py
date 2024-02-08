@@ -1,6 +1,5 @@
 import bcrypt
 from datetime import datetime
-import utils.exceptions as ex
 from utils.logger import logger
 from quart import current_app as app
 
