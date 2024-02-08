@@ -1,37 +1,11 @@
-from handlers import tools
-from auto_request_json import route_with_req
+from modules.tools.handler import ToolHandler as tools
+from utils.json_request_decorator import route_with_req as _
 
-# get all tools
-@route_with_req('/tool/get_tools', methods=['GET'])
-async def get_tools(data):
-    return await tools.get_tools(data)
 
-# get a tool by name
-@route_with_req('tool/get_tool/<tool_name>', methods=['GET'])
-async def get_tool(tool_name):
-    return await tools.get_tool(tool_name)
+@_('user/<user_id>/tool/<tool_id>/response', methods=['POST'])
+async def handle_tool(data, tool_id):
+    return await tools.handle_tool(data, tool_id) 
 
-# create a new tool
-@route_with_req('/tool/create', methods=['POST'])
-async def create_tool(tool):
-    return await tools.create_tool(tool)
-
-# delete the tool
-@route_with_req('/tool/delete/<tool_name>', methods=['DELETE'])
-async def delete_tool(tool):
-    return await tools.delete_tool(tool)
-
-# update the tool
-@route_with_req('/tool/update/<tool_name>', methods=['POST'])
-async def update_tool(tool):
-    return await tools.update_tool(tool)
-
-# # save the request of a tool call to use as training data
-# @route_with_req('/tool/tool_call', methods=['POST'])
-# async def tool_call(tool):
-#     return await tools.tool_call(tool)
-
-# # save the response of a tool call to use as training data
-# @route_with_req('/tool/tool_call_response/<tool_name>', methods=['POST'])
-# async def tool_call_response(response, tool_id):
-#     return await tools.tool_call_response(response, tool_id)
+@_('user/<user_id>/tools', methods=['GET'])
+async def get_tools(data, user_id):
+    return await tools.get_tools(data, user_id)
