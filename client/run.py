@@ -3,10 +3,13 @@ import asyncio
 import json
 import signal
 import os
+import time
 import speech_recognition as sr
+from pprint import pformat
 from dotenv import load_dotenv
 from utils.text_to_speech import text_to_speech
 from utils.logger import logger
+from modules.users import User
 
 # This flag will be used to stop the script
 stop_flag = False
@@ -16,34 +19,47 @@ MICROPHONE_INDEX = 1
 
 load_dotenv()
 
-key_phrase = 'ava'
-suitable_voices = ['Rachel', 'Sarah', 'Matilda', 'Nicole']
+key_phrases = ['ava', 'eva']
+current_user = None
 
 def signal_handler(signal, frame):
     global stop_flag
     stop_flag = True
     logger.info('Stopping...')
 
-async def speech_to_text(recognizer, audio):
+def listen_callback(recognizer, audio):
+    global current_user
+    start_time = time.time()
+    logger.info('Received audio data')
     try:
         text = recognizer.recognize_google(audio).lower()
-        logger.info('Recognized: ' + text)
-        print('Recognized: ' + text)
-        if key_phrase in text:
-            try:
-                response = await handle_request(text)
-                # text_to_speech(response['response']['content'], suitable_voices[1])
-                print(response)
-            except Exception as e:
-                logger.error('Error handling request... ' + str(e))
+        recognize_time = time.time()
+        logger.debug(f'Time taken for recognition: {recognize_time - start_time}')
+        logger.info(f'Recognized: {text}')
+        if any(phrase in text for phrase in key_phrases):
+            response = asyncio.run(handle_request(text))
+            if response:
+                logger.debug(f'Response received')
+                status = response['status']
+                type = response['data']['type']
+                if status == 'success' and type == 'text':
+                    response_text = response['data']['response']
+                    logger.info(f'Response: {response_text}')
+                    try:
+                        text_to_speech(response_text)
+                    except Exception as e:
+                        logger.error(f'Error in text_to_speech: {e}')
+                else:
+                    logger.error(f'Error in response: {response["message"]}')
     except Exception as e:
-        logger.error('Speech not recognized... ' + str(e))
+        logger.error(f'Speech not recognized: {str(e)}')
 
 async def handle_request(text):
+    global current_user
     data = {
         'user': {
-            '_id': 'placeholder',
-            'name': 'placeholder'
+            '_id': current_user.id,
+            'name': current_user.first_name
         },
         'request': {
             'type': 'text',
@@ -51,37 +67,15 @@ async def handle_request(text):
         }
     }
     async with aiohttp.ClientSession() as session:
-        async with session.post('http://localhost:5000/chat', json=data) as response:
+        async with session.post(f'http://localhost:5000/messages/{current_user.id}', json=data) as response:
+            logger.info('Sending request...')
             response = json.loads(await response.text())
+            logger.debug(f"Response: {pformat(response)}")
             return response
-        
-async def login(username, password):
-    data = {
-        'username': username,
-        'password': password
-    }
-    logger.info('Logging in...')
-    async with aiohttp.ClientSession() as session:
-        async with session.post('http://localhost:5000/user/login', json=data) as response:
-            response = json.loads(await response.text())
-            logger.debug(response)
-            return response
-        
-# Impliment logout
-# async def logout():
 
-        
-def listen_callback(recognizer, audio):
-    # This function will be called in a separate thread once the audio is recorded
-    asyncio.run(speech_to_text(recognizer, audio))
-        
-async def get_speech():
+async def start_listening():
     r = sr.Recognizer()
-    source = sr.Microphone()
-
-    with sr.Microphone() as source:
-        logger.info('Adjusting for ambient noise...')
-        r.adjust_for_ambient_noise(source, duration=1)  # Adjust for ambient noise
+    source = sr.Microphone(chunk_size=10240)
 
     logger.info('Listening...')
     r.listen_in_background(source, listen_callback)
@@ -89,24 +83,36 @@ async def get_speech():
         await asyncio.sleep(1)  # Add a delay to prevent high CPU usage
 
 async def main():
+    global stop_flag
+    # Rest of your main function...
+    await start_listening()
+
+async def main():
+    global stop_flag    
+    global current_user
+
     # login on the server
     try:
         username = os.getenv('SERVER_USERNAME')
         password = os.getenv('SERVER_PASSWORD')
         logger.debug(f'Logging in with {username} and {password}...')
-        login_result = await login(username, password)
-        if login_result['status'] == 'success':
-            logger.info(login_result['message'])
+        current_user = await User.login(username, password)
+        if  current_user:
+            try:
+                await start_listening()
+            except Exception as e:
+                logger.error(f'Error getting speech: {e}')
+                stop_flag = True
         else:
-            logger.error('Error logging in...')
-            raise Exception(login_result['status'],': ', login_result['message'])
-        await get_speech()
+            stop_flag = True
     except Exception as e:
         logger.error(f'NOT AUTHORIZED: Error logging in: {e}')
+        current_user = None
         stop_flag = True
 
 # Set the signal handler
 signal.signal(signal.SIGINT, signal_handler)
+
 signal.signal(signal.SIGTERM, signal_handler)
         
 # Run the main function
