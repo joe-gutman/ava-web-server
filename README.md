@@ -1,4 +1,4 @@
-# Ava Assistant AI
+# Ava Assistant AI [Work in Progress]
 
 Multiplatform voice assistant that handles daily user tasks 
 
