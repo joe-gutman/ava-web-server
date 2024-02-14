@@ -21,11 +21,39 @@ class ToolHandler:
             tools = request['data']['tools']
             logger.info(f'Creating tools: {tools}')
             device = await get_device_by_id(user_id, device_id)
-                    
-
-
+            updated_tools = []
+        	for user_tool in device['tools']:
+                for tool in tools:
+                	if user_tool['_id'] == device_id['_id']:
+                		updated_tool = await app.db.users.update_one({'_id': ObjectId(user_id), 'devices': device_id}, { tool.$: 'device_id'})
+                        updated_tools.append(updated_tool) 
+            return {
+                'status': 'success',
+                'message': 'Tools updated', 
+                'user': {
+                    '_id': user_id
+                },
+                'device': {
+                	'_id': device_id
+                },
+                'data': {
+                    'type': 'tools',
+                    'tools': updated_tools
+                }
             # If we get here, the device was not found
-            return {'message': 'Device not found'}, 404
+            return {
+    			'status': 'error', 
+            	'message': 'Device not found',
+                'user': {
+                	'_id': user_id,
+                },
+                'device': {
+                	'_id': device_id
+				'data' {
+                	'type': 'tools'
+                	'tools': tools
+                }
+            }, 404
         except Exception as e:
             logger.error(f'Error creating tools: {e}')
             return {'message': 'Error creating tools'}, 500
