@@ -5,20 +5,20 @@ from utils.logger import logger
 
 class DeviceHandler:
     @staticmethod
-    async def add_device(request, user_id, device_id):
+    async def add_device(request, user_id):
         device = request['data']['content']['device']
         try:
-            user_device = await app.db.users.find_one({'_id': ObjectId(user_id), 'devices._id': device_id}, {'devices.$': 1})
+            user_device = await app.db.users.find_one({'_id': ObjectId(user_id), 'devices._id': device['_id']}, {'devices.$': 1})
 
             logger.info(f'Device in request: {device}')
             if user_device is not None:
                 logger.info(f'Updating Device: {user_device}')
                 # Update the device
-                result = await app.db.users.update_one({'_id': ObjectId(user_id), 'devices._id': device_id}, {'$set': {'devices.$': device}})
+                result = await app.db.users.update_one({'_id': ObjectId(user_id), 'devices._id': device['_id']}, {'$set': {'devices.$': device}})
 
                 if result.modified_count > 0:
                     # Fetch the updated device
-                    updated_device = await app.db.users.find_one({'_id': ObjectId(user_id), 'devices._id': device_id}, {'devices.$': 1})
+                    updated_device = await app.db.users.find_one({'_id': ObjectId(user_id), 'devices._id': device['_id']}, {'devices.$': 1})
                     updated_device['_id'] = str(updated_device['_id'])
                     return {
                         'status': 'success',
@@ -50,7 +50,7 @@ class DeviceHandler:
             else:
                 result = await app.db.users.update_one({'_id': ObjectId(user_id)}, {'$push': {'devices': device}})
                 if result.modified_count > 0:
-                    new_device = await app.db.users.find_one({'_id': ObjectId(user_id), 'devices._id': device_id}, {'devices.$': 1})
+                    new_device = await app.db.users.find_one({'_id': ObjectId(user_id), 'devices._id': device['_id']}, {'devices.$': 1})
                     new_device['_id'] = str(new_device['_id'])
                     return {
                         'status': 'success',

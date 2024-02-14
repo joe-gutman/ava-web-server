@@ -9,6 +9,7 @@ from modules.assistant.handler import Assistant
 from modules.users import bp as users_bp
 from modules.messages import bp as messages_bp
 from modules.devices import bp as devices_bp
+from modules.tools import bp as tools_bp
 from db_connection import get_db_client
 
 app = Quart(__name__)
@@ -26,6 +27,7 @@ async def startup():
     app.register_blueprint(users_bp)
     app.register_blueprint(messages_bp)
     app.register_blueprint(devices_bp)
+    app.register_blueprint(tools_bp)
     try:
         params = json.load(open('config/ava_params.json'))
         app.assistant = await Assistant.initialize(params)
