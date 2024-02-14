@@ -3,54 +3,29 @@ from modules.tools.actions import main_functions as actions
 from quart import current_app as app
 from utils.logger import logger
 
+async def get_device_by_id(user_id, device_id):
+    try:
+        device = await app.db.users.find_one(
+            {'_id': ObjectId(user_id), 'devices': {'$elemMatch': {'_id': ObjectId(device_id)}}},
+            {'devices.$': 1}
+        )
+        return device['devices'][0] if device is not None else None
+    except Exception as e:
+        logger.error(f'Error getting device: {e}')
+        return None
+
 class ToolHandler:
     @staticmethod
-    async def create_tool(data, user_id, device_id):
+    async def create_tool(request, user_id, device_id):
         try:
-            tools = data['request']['tools']
+            tools = request['data']['tools']
             logger.info(f'Creating tools: {tools}')
-            devices = await app.db.users.find_one({'_id': ObjectId(user_id)}, {'devices': 1})
-
-            tool_update_count = 0
-            tool_create_count = 0
-
-            if devices is not None:
-                device = next((device for device in devices['devices'] if device['_id'] == device_id), None)
-
-                if device is None:
-                    logger.error(f'Device not found: {device_id}')
-                    return {'message': 'Device not found'}, 404
-
-                for tool in tools:
-                    for user_tool in device['tools']:
-                        if tool['name'] == user_tool['name']:
-                            logger.info(f'Updating tool: {tool}')
-                            user_tool.update(tool)  # Assuming update is a method of the tool object
-                            tool_update_count += 1
-                            break
-                    else:
-                        logger.info(f'Creating tool: {tool}')
-                        device['tools'].append(tool)
-                        tool_create_count += 1
-
-                await app.db.users.update_one({'_id': ObjectId(user_id)}, {'$set': {'devices': devices['devices']}})
-                return {
-                    'status': 'success',
-                    'status_message': f'Tools created: {tool_create_count}, Tools updated: {tool_update_count}',
-                    'user': {
-                        '_id': user_id
-                    },
-                    'data': {
-                        'content': {
-                            'tools': devices['tools']
-                        },
-                        'type': 'tools'   
-                    }
-                }
+            device = await get_device_by_id(user_id, device_id)
                     
-            else:
-                logger.error(f'User not found: {user_id}')
-                return {'message': 'User not found'}, 404
+
+
+            # If we get here, the device was not found
+            return {'message': 'Device not found'}, 404
         except Exception as e:
             logger.error(f'Error creating tools: {e}')
             return {'message': 'Error creating tools'}, 500
