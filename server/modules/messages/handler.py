@@ -5,16 +5,14 @@ from pprint import pformat
 from utils.logger import logger
 from utils.request_builder import build_request as build_request
 from modules.tools.handler import ToolHandler as tools
-from modules.assistant.assistant import Assistant
 
 class MessageHandler:
     @staticmethod
-    async def send_message(request, user_id):
+    async def send_message(request, user_id, device_id):
         try: 
-            logger.info(f'Handling message for user_id: {user_id}')
-            
-            ava_params = json.load(open('config/ava_params.json'))
-            assistant = await Assistant.initialize(ava_params)
+            assistant = app.assistant
+
+            logger.info(f'Handling message for user_id: {user_id}, device_id: {device_id}')
 
             user = await app.db.users.find_one({'_id': ObjectId(user_id)}, {'password': 0})
             logger.info(f'User found: {pformat(user)}')
@@ -32,14 +30,25 @@ class MessageHandler:
 
             # 'status': 'requires_action', means that the assistant has triggered a tool and is waiting for a response with the tool output.
             # If the response requires action, the appropriate tool will be called and the output will be returned.
-            if assistant_response['status'] == 'requires_action':
-                logger.info(f'Status: {assistant_response["status"]}')
-                tool_call = build_request(user, assistant_response['tool_calls'])
-                logger.info(f"Tool call detected: {pformat(tool_call)}")
+            return await MessageHandler.handle_response(assistant_response, user)
 
-                tool_output = await tools.handle_tool_call(tool_call)
-                logger.info(f"Tool output: {tool_output}")
+        except Exception as e:
+            logger.error(f'Error sending message: {e}')
+            return {'message': 'Error sending message'}, 500
+    
+    @staticmethod
+    async def handle_response(response, user):
+        if response['status'] == 'requires_action':
+            logger.info(f'Status: {response["status"]}')
+            tool_call = build_request(user, response['tool_calls'])
+            logger.info(f"Tool call detected: {pformat(tool_call)}")
 
+            tool_output = await tools.handle_tool_call(tool_call)
+            logger.info(f"Tool output: {tool_output}")
+
+            if (tool_output['status'] == 'client'):
+                return tool_output['message'], 200
+            else:
                 response_to_ai = { 
                     'tool_call_id': tool_call['request']['tool_call_id'], 
                     'tool_outputs': [{
@@ -53,33 +62,29 @@ class MessageHandler:
                 response_to_client = {
                     'status': 'success',
                     'user': {
-                        '_id': user_id,
+                        '_id': str(user['_id']),
                     },
                     'data': {
-                        'response': response_from_ai['message']['content'][0]['text']['value'],
+                        'content': response_from_ai['message']['content'][0]['text']['value'],
                         'type': response_from_ai['message']['content'][0]['type']
                     }
                 }
                 logger.info(f'Message sent to client: {pformat(response_to_client)}')
                 return response_to_client, 200
-            elif assistant_response['status'] == 'completed':
-                logger.info(f'Status: {assistant_response["status"]}')
-                response_to_client = {
-                    'status': 'success',
-                    'user': {
-                        '_id': user_id,
-                    },
-                    'data': {
-                        'response': assistant_response['message']['content'][0]['text']['value'],
-                        'type': assistant_response['message']['content'][0]['type']
-                    }
+        elif response['status'] == 'completed':
+            logger.info(f'Status: {response["status"]}')
+            response_to_client = {
+                'status': 'success',
+                'user': {
+                    '_id': str(user['_id']),
+                },
+                'data': {
+                    'content': response['message']['content'][0]['text']['value'],
+                    'type': response['message']['content'][0]['type']
                 }
-                logger.info(f'Message sent to client: {pformat(response_to_client)}')
-                return response_to_client, 200
-
-        except Exception as e:
-            logger.error(f'Error sending message: {e}')
-            return {'message': 'Error sending message'}, 500
+            }
+            logger.info(f'Message sent to client: {pformat(response_to_client)}')
+            return response_to_client, 200
 
     @staticmethod
     async def get_message_history(user_id):

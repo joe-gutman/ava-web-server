@@ -1,13 +1,15 @@
-import signal
 import sys
+import json
+import signal
 import motor.motor_asyncio as motor
 from quart import Quart
 from dotenv import load_dotenv
-from utils.logger import get_logger
+from utils.logger import logger
+from modules.assistant.handler import Assistant
 from modules.users import bp as users_bp
 from modules.messages import bp as messages_bp
+from modules.devices import bp as devices_bp
 from db_connection import get_db_client
-from utils.logger import logger
 
 app = Quart(__name__)
 load_dotenv()
@@ -16,9 +18,20 @@ load_dotenv()
 @app.before_serving
 async def startup():
     logger.info("Starting up server...")
-    app.db = await get_db_client()
+    try:
+        app.db = await get_db_client()
+    except Exception as e:
+        logger.error(f'Error connecting to database: {e}')
+        sys.exit(1)
     app.register_blueprint(users_bp)
     app.register_blueprint(messages_bp)
+    app.register_blueprint(devices_bp)
+    try:
+        params = json.load(open('config/ava_params.json'))
+        app.assistant = await Assistant.initialize(params)
+    except Exception as e:
+        logger.error(f'Error initializing assistant: {e}')
+        sys.exit(1)
 
 @app.after_serving
 async def shutdown():

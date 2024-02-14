@@ -50,25 +50,5 @@
         }
       }
     }
-  },{
-    "type": "function",
-    "function": {
-        "name": "open_website",
-        "description": "Open multiple websites in the user's default browser",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "websites": {
-                    "type": "array",
-                    "items": {
-                        "type": "string",
-                        "description": "The name of a website to open, without protocol or TLD e.g. 'google' for Google.com"
-                    },
-                    "description": "A list of website names to open"
-                }
-            },
-            "required": ["websites"]
-        }
-    }
   }]
 }
