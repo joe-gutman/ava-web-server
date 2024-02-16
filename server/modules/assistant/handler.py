@@ -2,7 +2,6 @@ import os
 import json
 from pprint import pformat
 from pyaimanager import AssistantManager
-from utils.tool_functions import functions
 from utils.logger import logger
 from dotenv import load_dotenv
 
@@ -94,28 +93,16 @@ class Assistant:
         logger.info(f"Assistant triggered: {triggered}")           
         if triggered:
             try:
-                response = await self.assistant.send_message(message)
+                response = (await self.assistant.send_message(message))[0]
                 logger.info(f"Response: {pformat(response)}")
-                return response
-
-                    # for tool in response['tool_calls']:
-                    #     tool_call_outputs = 
-                    #     tool_call_id = tool['tool_call_id']
-                    #     function_name = tool['function_name']
-                    #     function_args = tool['arguments']
-
-
-                    #     tool_call_outputs.append({
-                    #         "tool_call_id": tool_call_id,
-                    #         "output": tool_output
-                    #     })
-
-                    # Submit the tool outputs to the assistant
-                    # try:
-                    #     await self.assistant.submit_tool_output(tool_call_outputs)
-                    # except Exception as e:
-                    #     logger.error(f"Error in submit_tool_output: {str(e)}")
-                    #     raise Exception(f'Error in submit_tool_output: {str(e)}')
+                return {
+                    'status': response['status'],
+                    'message': response['message'],
+                    'data': {
+                        'type': 'tool_call',
+                        'content': response['tool_calls']
+                    }
+                }
             except Exception as e:
                 logger.error(f'Error in send_message: {str(e)}')
                 raise Exception(f"Error in send_message: {str(e)}")

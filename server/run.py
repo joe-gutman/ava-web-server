@@ -10,7 +10,7 @@ from modules.users import bp as users_bp
 from modules.messages import bp as messages_bp
 from modules.devices import bp as devices_bp
 from modules.tools import bp as tools_bp
-from db_connection import get_db_client
+from db_connection import initialize_client
 
 app = Quart(__name__)
 load_dotenv()
@@ -20,7 +20,7 @@ load_dotenv()
 async def startup():
     logger.info("Starting up server...")
     try:
-        app.db = await get_db_client()
+        app.db = await initialize_client()
     except Exception as e:
         logger.error(f'Error connecting to database: {e}')
         sys.exit(1)
