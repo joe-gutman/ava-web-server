@@ -8,8 +8,8 @@ bp = Blueprint('messages', __name__)
 # send a message, also saves the message in the database message history
 @_(bp, '/messages/user/<user_id>/device/<device_id>', methods=['POST'])
 async def send_message_route(request, user_id, device_id):
-    logger.info('Received POST request on /messages/%s', user_id)
-    result, status_code = await message.send_message(request, user_id, device_id)
+    logger.info(f'Received POST request on /messages/{user_id}/device/{device_id}')
+    result, status_code = await message.send_message(request, user = user_id, device = device_id)
     if result is None or status_code is None:
         return jsonify({'message': 'Error handling message'}), 500
     logger.info('Response status code: %s, Response: %s', status_code, result)
@@ -20,15 +20,5 @@ async def send_message_route(request, user_id, device_id):
 async def get_message_route(user_id):
     logger.info('Received GET request on /messages/%s', user_id)
     result, status_code = await message.get_messages(user_id)
-    logger.info('Response status code: %s, Response: %s', status_code, result)
-    return jsonify(result), status_code
-
-# tool response from client
-@_(bp, '/messages/tool', methods=['POST'])
-async def tool_response(request, user_id, device_id):
-    logger.info('Received POST request on /messages/tool')
-    result, status_code = await message.tool_response(request)
-    if result is None or status_code is None:
-        return jsonify({'message': 'Error handling message'}), 500
     logger.info('Response status code: %s, Response: %s', status_code, result)
     return jsonify(result), status_code

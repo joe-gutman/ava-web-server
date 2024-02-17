@@ -1,11 +1,20 @@
 import os
 import json
+from bson import ObjectId
+from datetime import datetime
 from pprint import pformat
 from pyaimanager import AssistantManager
 from utils.logger import logger
 from dotenv import load_dotenv
 
 load_dotenv()
+
+def handle_non_serializable(obj):
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    elif isinstance(obj, ObjectId):
+        return str(obj)
+    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
 
 class Assistant:
     """
@@ -84,25 +93,36 @@ class Assistant:
                 return False
         except Exception as e:
             logger.error("Error checking if assistant is triggered: " + str(e))
-
                 
     async def send_message(self, message):
         if type(message) is dict:
-            message = json.dumps(message)
+            message = json.dumps(message, default=handle_non_serializable)
         triggered = await self.is_triggered(message) 
         logger.info(f"Assistant triggered: {triggered}")           
         if triggered:
             try:
-                response = (await self.assistant.send_message(message))[0]
+                response = await self.assistant.send_message(message)
+                logger.info(f"Request: {pformat(message)}")
                 logger.info(f"Response: {pformat(response)}")
-                return {
-                    'status': response['status'],
-                    'message': response['message'],
-                    'data': {
-                        'type': 'tool_call',
-                        'content': response['tool_calls']
+                if isinstance(response, list):
+                    response = response[0]
+                    return {
+                        'status': response['status'],
+                        'message': 'Assistant response',
+                        'data': {
+                            'type': 'tool_call',
+                            'content': response['tool_calls']
+                        }
                     }
-                }
+                else:
+                    return {
+                        'status': response['status'],
+                        'message': 'Assistant response',
+                        'data': {
+                            'type': 'ai_response',
+                            'content': response
+                        }
+                    }
             except Exception as e:
                 logger.error(f'Error in send_message: {str(e)}')
                 raise Exception(f"Error in send_message: {str(e)}")

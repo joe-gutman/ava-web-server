@@ -1,33 +1,47 @@
 import json
+from datetime import datetime
 from bson import ObjectId
 from quart import current_app as app
 from pprint import pformat
 from utils.logger import logger
 from utils.request_builder import build_request as build_request
+from utils.fetch_entities import fetch_entities
 from modules.tools.handler import ToolHandler as tools
+from modules.devices.handler import DeviceHandler as devices
+from modules.users.handler import UserHandler as users
+
 
 class MessageHandler:
     @staticmethod
-    async def send_message(request, user_id, device_id):
+    @fetch_entities
+    async def send_message(request, user, device):
+        logger.info(f'User: {user}\n Device: {device}')
         try: 
             message = request['data']['content']
             assistant = app.assistant
-            logger.info(f'Handling message: "{message}" for user_id: {user_id}, device_id: {device_id}')
 
-            user = await app.db.users.find_one({'_id': ObjectId(user_id)}, {'password': 0})
-            logger.info(f'User found: {pformat(user)}')
 
-            request = build_request(user, request)
+            logger.info(f'Handling message: "{message}" for user: {user["_id"]}, device: {device["_id"]}')
+            request = {
+                'status': 'in_progress',
+                'message': 'Message being sent',
+                'user': user,
+                'device': device,
+                'data': {
+                    'type': 'text',
+                    'content': message
+                }
+            }
             
-            logger.info(f'Message: {pformat(request)}')
+            logger.info(pformat(request))
 
-            assistant_response = await assistant.send_message(message)
+            assistant_response = await assistant.send_message(request)
             logger.info(f'Assistant response: {pformat(assistant_response)}')
 
             if isinstance(assistant_response, list):
                 assistant_response = assistant_response[0]
 
-            return await MessageHandler.handle_response(assistant_response, user_id, device_id)
+            return await MessageHandler.handle_response(assistant_response, user, device)
 
         except Exception as e:
             logger.error(f'Error sending message: {e}')
@@ -38,51 +52,44 @@ class MessageHandler:
                     '_id': user['_id']
                 },
                 'device': {
-                    '_id': device_id
+                    '_id': device['_id']
                 },
                 'data': {
                     "content": message,
                 }
-                }, 500
+            }, 500
     
     @staticmethod
-    async def handle_response(response, user_id, device_id):
+    async def handle_response(response, user, device):    
         try:
             if response['status'] == 'requires_action':
                 logger.info(f'Status: {response["status"]}')
-                tool_call = build_request(tool_call, user_id, device_id)
-                logger.info(f"Tool call detected: {pformat(tool_call)}")
+                tool_call = response['data']['content']
+                logger.info(f"Tool call detected: {pformat(response)}")
 
-                tool_output = await tools.handle_tool_call(response['data']['content'], user_id, device_id)
-                logger.info(f"Tool output: {tool_output}")
+                tool_output = await tools.handle_tool_call(tool_call, user, device)
+                logger.info(f'Tool call connected to output: {pformat(tool_call)}')
+                logger.info(f"Tool output: {pformat(tool_output)}")
 
                 if (tool_output['status'] == 'requires_client_action'):
                     return tool_output['message'], 200
                 else:
-                    user = await app.db.users.find_one({'_id': ObjectId(user_id)}, {'password': 0})
                     response_to_ai = { 
-                        'tool_call_id': tool_call['request']['tool_call_id'], 
                         'tool_outputs': [{
-                            'tool_call_id': tool_call['request']['tool_call_id'],
-                            'output': {
+                            'tool_call_id': tool_call['tool_call_id'],
+                            'output': json.dumps({
                                 'status': 'completed',
                                 'message': 'Tool output',
                                 'user': {
-                                    'username': user['username'],
-                                    'name': user['name']
+                                    'name': user['first_name']
                                 },
                                 'data': {
                                     'content': tool_output['data']['content'],
-                                    'type': tool_output['data']['type'],
-                                    'tool': {
-                                        'name': tool_output['data']['tool']['name'],
-                                        'id': tool_output['data']['tool']['id']
-                                    }
                                 }
-                            }                      
+                            })                      
                         }]
                     }
-                    logger.info(f"Submitting tool response: {pformat(response_to_ai)}")
+                    logger.info(f"Submitting tool response to AI: {pformat(response_to_ai)}")
 
                     response_from_ai = await app.assistant.send_tool_response(response_to_ai)
                     logger.info(f'AI response to tool output: {pformat(response_from_ai)}')
@@ -103,11 +110,14 @@ class MessageHandler:
                 response_to_client = {
                     'status': 'success',
                     'user': {
-                        '_id': str(user['_id']),
+                        '_id': user['_id'],
+                    },
+                    'device': {
+                        '_id': device['_id'],
                     },
                     'data': {
-                        'content': response['message']['content'][0]['text']['value'],
-                        'type': response['message']['content'][0]['type']
+                        'content': response['data']['content']['message']['content'][0]['text']['value'],
+                        'type': response['data']['content']['message']['content'][0]['type']
                     }
                 }
                 logger.info(f'Message sent to client: {pformat(response_to_client)}')
@@ -121,7 +131,7 @@ class MessageHandler:
                     '_id': user['_id']
                 },
                 'device': {
-                    '_id': device_id
+                    '_id': device['_id']
                 },
                 'data': {
                     "content": response['data']['content'],
