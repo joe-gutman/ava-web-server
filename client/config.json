@@ -1,0 +1,21 @@
+{
+    "device": {
+        "_id": "fd3f6a8a-9caf-42bb-8a5a-4df080ddaf01",
+        "name": "Main PC",
+        "type": "computer",
+        "specifications": {
+            "type": "desktop",
+            "os": "Windows",
+            "version": "11",
+            "architecture": "64-bit"
+        },
+        "location": {
+            "city": "Battle Ground",
+            "state": "Washington",
+            "country": "United States",
+            "building": "home",
+            "room": "bedroom"
+        },
+        "tools":[]
+    }
+}

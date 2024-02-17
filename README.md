@@ -1,6 +1,6 @@
-# Ava Assistant AI
+# Ava Assistant AI [Work in Progress]
 
-This is a voice assistant project named Ava.
+Multiplatform voice assistant that handles daily user tasks 
 
 ## Description
 
