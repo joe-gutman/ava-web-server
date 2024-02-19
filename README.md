@@ -13,7 +13,7 @@ Ava Assistant AI is a voice assistant that uses speech recognition and it's own 
 >[!Note]
 > Uses [pyaimanager](https://github.com/joe-gutman/pyaimanager), made by me, as the library to communicate with the OpenAI assistants. 
 
-## Demo
+## Demo (wait time between request and response are sped up 2x and do not reflect the actual wait time).
 
 https://github.com/joe-gutman/ava-ai-assistant/assets/2061754/69501d9e-1ad5-44a9-acf3-88c8f04d3bbc
 
