@@ -1,10 +1,12 @@
-import httpx
-from quart import Quart, request
+from aiohttp import ClientSession
+from quart import Quart
+from tools.actions import  main_functions as actions
 from utils.logger import logger
 from utils.json_request_decorator import route_with_req as _
-from tools.actions import  main_functions as actions
+from config.device_config import device_config as device
 
 app = Quart(__name__)
+current_user = None
 
 @_(app, '/command', methods=['POST'])
 async def forward_command(request):
@@ -12,8 +14,10 @@ async def forward_command(request):
         # run functions from actions 
         function_name = request['tool']['name']
         function_args = request['tool']['arguments']
+        logger.info(f'Received command: {function_name} with args {function_args}')
         function = actions.get(function_name)
         if function:
+            logger.info(f'Executing command: {function_name} with args {function_args}')
             result = await function(**function_args)
             response = {
                 'status': 'success',
@@ -23,9 +27,10 @@ async def forward_command(request):
                     'content': result
                 }
             }
-            logger.info(response)
+            logger.info(f'Successfully executed command: {response}')
             return response, 200
         else:
+            logger.error(f'Tool {function_name} not found')
             return {
                 'status': 'error',
                 'message': f'Tool {function_name} not found',
@@ -33,7 +38,7 @@ async def forward_command(request):
                     'type': 'command_result',
                     'content': f'Tool {function_name} not found'
                 }
-            }
+            }, 404
     except Exception as e:
         logger.error(f"Error executing command: {e}")
         return {
@@ -43,8 +48,76 @@ async def forward_command(request):
                 'type': 'command',
                 'content': f'Error executing command: {function_name} with args {function_args}'
             }
-        }
+        }, 500
+@_(app, '/send_message/<user_id>', methods=['POST'])
+async def send_message(request, user_id):
+    global current_user
+    try: 
+        logger.info(f"Sending message: {request['data']['content']}")
+        logger.info(f"User: {request['user']}")
+        logger.info(f"Device: {device}")
+        logger.info(f"Current user: {current_user}")
+        if current_user['_id'] == user_id:
+            logger.info('Current user is the same as the request user')
+            async with ClientSession() as session:
+                request_data = {
+                    "data": {
+                        "type": "text",
+                        "content": request['data']['content']
+                    }
+                }
+                logger.info(f'Sending request {request_data}')
+                async with session.post(f"http://localhost:5000/messages/user/{current_user['_id']}/device/{device['_id']}", json=request_data) as response:
+                    response = await response.json()
+                    logger.debug(f"Response: {response}")
 
+                    status = response['status']
+                    type = response['data']['type']
+                    if status == 'success' and type == 'text':
+                        response_text = response['data']['content']
+                        logger.info(f'Response: {response_text}')
+                        return {
+                            'status': 'speak',
+                            'user': current_user,
+                            'data': {
+                                'type': 'text',
+                                'content': response_text
+                            }
+                        }, 200
+                    else:
+                        logger.error(f'Error in response: {response["message"]}')
+                        return {
+                            'status': 'error',
+                            'message': response['message']
+                        }, 500
+        else:
+            logger.error('Current user is not the same as the request user')
+            return {
+                'status': 'error',
+                'message': 'Current user is not the same as the request user'
+            }, 500
+    except Exception as e:
+        logger.error(f'Error in send_request: {e}')
+        return {"status": "error", "message": str(e)}, 500
+
+@_(app, '/user/login', methods=['POST'])
+async def login(request):
+    global current_user
+    try: 
+        async with ClientSession() as session:
+            async with session.post('http://localhost:5000/user/login', json=request) as response:
+                logger.info('Sending login request...')
+                response = await response.json()
+                logger.debug(f"Response: {response}")
+
+                if response['status'] == 'success':
+                    current_user = response['user']
+                    logger.info(f'Logged in as: {current_user}')
+                    
+                return response
+    except Exception as e:
+        logger.error(f'Error in login request: {e}')
+        return {"status": "error", "message": str(e)}, 500
 
 if __name__ == "__main__":
     app.run(port=5001, host="10.0.0.229")
