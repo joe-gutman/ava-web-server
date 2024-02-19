@@ -1,17 +1,20 @@
+
+> [!Caution]
+> **AVA IS A WORK IN PROGRESS. It is not available for release. There may be bugs and other issues. Explore at your own risk.** 
+
 # Ava Assistant AI [Work in Progress]
 
 Multiplatform voice assistant that handles daily user tasks. 
 
 ## Description
 
-> [!Caution]
-> Ava is a work in progress and is not available for release. There may be bugs and other issues. Explore at your own risk. 
-
 Ava Assistant AI is a voice assistant that uses speech recognition and it's own voice to interact and communicate with users. Ava is very basic at the moment but will be improved over time.
+
+>[!Note]
+> Uses [pyaimanager](https://github.com/joe-gutman/pyaimanager), made by me, as the library to communicate with the OpenAI assistants. 
 
 ## Current Platforms
 - Windows 11
-
 
 ## Current Features
 - Get voice input from the user
