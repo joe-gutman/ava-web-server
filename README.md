@@ -1,4 +1,6 @@
 
+https://github.com/joe-gutman/ava-ai-assistant/assets/2061754/ccc1e0e7-3609-4dc9-8280-3ec41a9e7d84
+
 > [!Caution]
 > **AVA IS A WORK IN PROGRESS. It is not available for release. There may be bugs and other issues. Explore at your own risk.** 
 
@@ -13,12 +15,20 @@ Ava Assistant AI is a voice assistant that uses speech recognition and it's own 
 >[!Note]
 > Uses [pyaimanager](https://github.com/joe-gutman/pyaimanager), made by me, as the library to communicate with the OpenAI assistants. 
 
+## Demo
+
+https://github.com/joe-gutman/ava-ai-assistant/assets/2061754/69501d9e-1ad5-44a9-acf3-88c8f04d3bbc
+
+
+
+
 ## Current Platforms
 - Windows 11
 
 ## Current Features
 - Get voice input from the user
 - Sends and receives messages to and from the assistant server
+- 
 - Speaks to the user using a generated voice
 - Run tools locally on specified devices (referencing device server address saved in DB)
 
