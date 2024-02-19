@@ -1,6 +1,4 @@
 
-https://github.com/joe-gutman/ava-ai-assistant/assets/2061754/ccc1e0e7-3609-4dc9-8280-3ec41a9e7d84
-
 > [!Caution]
 > **AVA IS A WORK IN PROGRESS. It is not available for release. There may be bugs and other issues. Explore at your own risk.** 
 
@@ -18,9 +16,6 @@ Ava Assistant AI is a voice assistant that uses speech recognition and it's own 
 ## Demo
 
 https://github.com/joe-gutman/ava-ai-assistant/assets/2061754/69501d9e-1ad5-44a9-acf3-88c8f04d3bbc
-
-
-
 
 ## Current Platforms
 - Windows 11
