@@ -1,14 +1,10 @@
 import json
-from datetime import datetime
-from bson import ObjectId
 from quart import current_app as app
 from pprint import pformat
 from utils.logger import logger
 from utils.request_builder import build_request as build_request
 from utils.fetch_entities import fetch_entities
 from modules.tools.handler import ToolHandler as tools
-from modules.devices.handler import DeviceHandler as devices
-from modules.users.handler import UserHandler as users
 
 
 class MessageHandler:
@@ -38,6 +34,9 @@ class MessageHandler:
             assistant_response = await assistant.send_message(request)
             logger.info(f'Assistant response: {pformat(assistant_response)}')
 
+            if assistant_response is None:
+                return None, 200
+            
             if isinstance(assistant_response, list):
                 assistant_response = assistant_response[0]
 
@@ -68,7 +67,7 @@ class MessageHandler:
                 logger.info(f"Tool call detected: {pformat(response)}")
 
                 tool_output = await tools.handle_tool_call(tool_call, user, device)
-                logger.info(f'Tool call connected to output: {pformat(tool_call)}')
+                logger.info(f'Tool call: {pformat(tool_call)}')
                 logger.info(f"Tool output: {pformat(tool_output)}")
 
                 if (tool_output['status'] == 'requires_client_action'):

@@ -8,7 +8,7 @@ bp = Blueprint('messages', __name__)
 # send a message, also saves the message in the database message history
 @_(bp, '/messages/user/<user_id>/device/<device_id>', methods=['POST'])
 async def send_message_route(request, user_id, device_id):
-    logger.info(f'Received POST request on /messages/{user_id}/device/{device_id}')
+    logger.info(f'Received POST request on /messages/user/{user_id}/device/{device_id}')
     result, status_code = await message.send_message(request, user = user_id, device = device_id)
     if result is None or status_code is None:
         return jsonify({'message': 'Error handling message'}), 500

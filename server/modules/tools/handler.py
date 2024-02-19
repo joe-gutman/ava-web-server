@@ -15,12 +15,16 @@ class ToolHandler:
             logger.info(f'Handling tool call: {tool_call}')
             tool_name = tool_call['function_name']
             tool_arguments = tool_call['arguments']
+            tool_arguments['user'] = user
 
             tool_location = (await ToolHandler.get_tool_by_name(user, device, tool_call['function_name']))['data']['content']['tool']['device']
             logger.info(f'Tool location: {tool_location}')
             logger.info(f'Device: {pformat(device)}')
+            logger.info(f'tool_name: {tool_name}') 
+            logger.info(f'tool_arguments: {tool_arguments}')
+            logger.info(f'tool_call: {pformat(tool_call)}')
             if tool_location == 'server':
-                response = await actions.get(tool_name)(tool_arguments)
+                response = await actions.get(tool_name)(**tool_arguments)
                 # run tool from dictionary 'function name': function
                 return {
                     'status': 'success',

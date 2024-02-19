@@ -4,7 +4,8 @@ from utils.logger import logger
 from quart import current_app as app
 
 class UserHandler:
-    async def register_user(self, request):
+    @staticmethod
+    async def register_user(request):
         try: 
             req_keys = ['username', 'password', 'email', 'first_name', 'last_name']
             missing_keys = [key for key in req_keys if key not in data]
@@ -37,7 +38,8 @@ class UserHandler:
                 'message': 'Error registering user'
             }, 500
 
-    async def login_user(self, data):
+    @staticmethod
+    async def login_user(data):
         if 'username' not in data or 'password' not in data:
             return {
                 'status': 'error', 

@@ -128,7 +128,7 @@ async def main(user, unit = None, location = None, time = None):
     logger.info(f"Running main function with user: {user}, unit: {unit}, location: {location}, time: {time}")
     try:
         api_key = os.getenv('OPENWEATHER_API_KEY')
-        unit = 'imperial' if (unit or user['settings']['preferred_temp_unit']) == 'f' else 'metric'
+        unit = 'imperial' if (unit or user['settings']['temp_unit']) == 'f' else 'metric'
         logger.info(f"Using unit: {unit}")
         logger.info(f"Using api_key: {api_key}")
         return await get_weather(location, unit, time, api_key)

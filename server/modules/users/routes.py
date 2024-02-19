@@ -1,6 +1,6 @@
 import logging
 from quart import Blueprint, jsonify
-from modules.users import handler as users
+from modules.users.handler import UserHandler as users
 from utils.json_request_decorator import route_with_req as _
 
 bp = Blueprint('users', __name__)
