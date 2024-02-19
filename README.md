@@ -29,11 +29,11 @@ Ava Assistant AI is a voice assistant that uses speech recognition and it's own 
 
 ### Client Side (Windows 11)
 - Open 1 or more websites at a time
+- Type out text based on request
 
 ### *Future Tools*
 - Read highlighted text on specified device
-- Type out text on specified deice based on request
-- Search the internet
+- Search the internet and return results
 - Open software on device
 
 > [!Note]
