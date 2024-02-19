@@ -4,7 +4,7 @@
 
 # Ava Assistant AI [Work in Progress]
 
-Multiplatform voice assistant that handles daily user tasks. 
+Multiplatform voice assistant that handles daily user tasks using OpenAI custom assistants.
 
 ## Description
 
