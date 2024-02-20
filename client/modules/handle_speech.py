@@ -47,13 +47,13 @@ class SpeechHandler:
                     name=self.chosen_voice,
                     category='premade',
                     settings=VoiceSettings(
-                        stability=0.5,
-                        similarity_boost=0.5,
-                        style=0.0,
+                        stability=0.4,
+                        similarity_boost=0.35,
+                        style=0.25,
                         use_speaker_boost=False
                     )
                 ),
-                model='eleven_monolingual_v1',
+                model='eleven_multilingual_v2',
                 stream=True,
             )
 
