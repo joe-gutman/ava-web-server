@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-async def initialize_client():
+async def connect_to_db():
     db_username = os.getenv('DB_USERNAME')
     db_password = os.getenv('DB_PASSWORD')
     client = motor.AsyncIOMotorClient(f"mongodb://{db_username}:{db_password}@localhost:27017")

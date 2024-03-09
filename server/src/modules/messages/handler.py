@@ -1,4 +1,7 @@
 import json
+import asyncio
+from bson import ObjectId
+from concurrent.futures import ThreadPoolExecutor
 from quart import current_app as app
 from pprint import pformat
 from utils.logger import logger
@@ -6,41 +9,87 @@ from utils.request_builder import build_request as build_request
 from utils.fetch_entities import fetch_entities
 from modules.tools.handler import ToolHandler as tools
 
+executor = ThreadPoolExecutor(max_workers=5)
 
 class MessageHandler:
     @staticmethod
     @fetch_entities
-    async def send_message(request, user, device):
-        logger.info(f'User: {user}\n Device: {device}')
+    async def receive_user_message(request, user_id, device_id):
         try: 
-            message = request['data']['content']
-            assistant = app.assistant
+            # -------------------- Check if message exists in request -------------------- #
+            if request['type'] == 'text':
+                message = request['text']
+                if message is None or message == "":
+                    return {
+                        "type": "error",
+                        "error": "Bad Request: No message was sent to the assistant."
 
+                    }, 400
+                assistant = app.assistant
+            else:
+                return {
+                    "type": "error",
+                    "error": f"Bad Request: Message request is {request['type']} but should be text."
+                }, 400
+            
+            # -------------- Check if user and device ids exist in database -------------- #
+            user = await app.db['users'].find_one({'_id': ObjectId(user_id)}, {'password': 0})
+            device = await app.db['devices'].find_one({'_id': ObjectId(device_id)}, {'password': 0})
+            if user is None: 
+                error_message = f"User not found with id: {user_id}"
+                logger.error(error_message)
+                return {
+                    "type": "error",
+                    "error": error_message
+                }, 404
+            if device is None: 
+                error_message = f"Device not found with id: {device_id}"
+                logger.error(error_message)
+                return {
+                    "type": "error",
+                    "error": error_message
+                }, 404
+            else:
+                logger.info(f'Handling message: "{message}" for user: {user_id}, device: {device_id}')
 
-            logger.info(f'Handling message: "{message}" for user: {user["_id"]}, device: {device["_id"]}')
+            # # -------------------- Build request to send to assistant -------------------- #
             request = {
-                'status': 'in_progress',
-                'message': 'Message being sent',
-                'user': user,
-                'device': device,
-                'data': {
-                    'type': 'text',
-                    'content': message
+                "user": user,
+                "device": device,
+                "data": {
+                    "type": "text",
+                    "text": message
                 }
             }
-            
-            logger.info(pformat(request))
 
-            assistant_response = await assistant.send_message(request)
+            # -------------- Send request to assistant and wait for response -------------- #
+            loop = asyncio.get_running_loop()
+            assistant_response = await loop.run_in_executor(executor, assistant.interact, request)
             logger.info(f'Assistant response: {pformat(assistant_response)}')
-
             if assistant_response is None:
-                return None, 200
+                return {
+                    "type": "error",
+                    "error": "Assistant failed to respond to request."
+                }, 500
             
-            if isinstance(assistant_response, list):
-                assistant_response = assistant_response[0]
-
-            return await MessageHandler.handle_response(assistant_response, user, device)
+            # ------------------------- Build response for client ------------------------ #
+            response = {
+                "user": user,
+                "device": device,
+                "data": assistant_response
+            }
+        
+            # ---------------------- Handle response from assistant ---------------------- #
+            if assistant_response['type'] == 'text':
+                response['data'] = assistant_response
+                return response, 200
+            
+            if assistant_response['type'] == 'error':
+                response['data'] = assistant_response
+                return response, 500
+                
+            return response, 200
+            
 
         except Exception as e:
             logger.error(f'Error sending message: {e}')

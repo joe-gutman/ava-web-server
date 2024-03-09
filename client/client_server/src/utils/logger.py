@@ -15,7 +15,7 @@ def get_logger(name, level="INFO"):
     logger = logging.getLogger(name)
     logger.setLevel(level)
 
-    file_handler = logging.FileHandler('server_debug.log')
+    file_handler = logging.FileHandler('logs/server_debug.log')
     file_handler.setLevel(level)
 
     # stream_handler = logging.StreamHandler()

@@ -1,7 +1,7 @@
-import logging
 from quart import Blueprint, jsonify
 from modules.users.handler import UserHandler as users
 from utils.json_request_decorator import route_with_req as _
+from utils.logger import logger
 
 bp = Blueprint('users', __name__)
 
@@ -18,18 +18,18 @@ async def update_tool(request, user_id, device_id):
 # login user
 @_(bp, '/user/login', methods=['POST'])
 async def login_user(data):
-    logging.info('Received POST request on /user/login')
+    logger.info('Received POST request on /user/login')
     result, status_code = await users.login_user(data)
     if result is None or status_code is None:
         return jsonify({'message': 'Error logging in user'}), 500
-    logging.info(f'Response status code: {status_code}, Response: {result}')
+    logger.debug(f'Response status code: {status_code}, Response: {result}')
     return jsonify(result), status_code
 
 @_(bp, '/user/register', methods=['POST'])
 async def register_user(data):
-    logging.info('Received POST request on /user/register')
+    logger.info('Received POST request on /user/register')
     result, status_code = await users.register_user(data)
     if result is None or status_code is None:
         return jsonify({'message': 'Error registering user'}), 500
-    logging.info(f'Response status code: {status_code}, Response: {result}')
+    logger.debug(f'Response status code: {status_code}, Response: {result}')
    

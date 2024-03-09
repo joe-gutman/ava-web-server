@@ -55,10 +55,11 @@ async def main():
 
         if current_user:
             # Start listening
+            logger.info("Starting to listen...")
             try:
                 play_startup_sound()
                 while not stop_flag:
-                    text = await speech.start_listening()
+                    text = await speech.capture_audio()
                     
                     logger.info(f'Sending message: {text}')
                     async with ClientSession() as client:
@@ -67,7 +68,7 @@ async def main():
                             "user": current_user,
                             "data": {
                                 "type": "text",
-                                "content": text
+                                "text": text
                             }
                         }
                         logger.info(f'Sending request: {formated_request}')
@@ -78,7 +79,7 @@ async def main():
 
                             # Convert text to speech in asyncio event loop
                             loop = asyncio.get_event_loop()
-                            await loop.run_in_executor(None, speech.text_to_speech, response_data["data"]["content"])
+                            await loop.run_in_executor(None, speech.text_to_speech, response_data["data"]["text"])
 
             except Exception as e:
                 logger.error(f'Error getting speech: {e}')

@@ -1,37 +1,42 @@
+import os
 import sys
 import json
 import signal
-import motor.motor_asyncio as motor
 from quart import Quart
 from dotenv import load_dotenv
 from utils.logger import logger
-from modules.assistant.handler import Assistant
-from modules.users import bp as users_bp
-from modules.messages import bp as messages_bp
-from modules.devices import bp as devices_bp
-from modules.tools import bp as tools_bp
-from db_connection import initialize_client
+from assistant.handler import Assistant
+from modules.users.routes import bp as users_bp
+from modules.messages.routes import bp as messages_bp
+from modules.devices.routes import bp as devices_bp
+from modules.tools.routes import bp as tools_bp
+from db_connection import connect_to_db
 
+os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
 
 app = Quart(__name__)
 load_dotenv()
 
-
 @app.before_serving
 async def startup():
     logger.info("Starting up server...")
+    app.register_blueprint(users_bp)
+    app.register_blueprint(messages_bp)
+    # app.register_blueprint(devices_bp)
+    # app.register_blueprint(tools_bp)
+
+
     try:
-        app.db = await initialize_client()
+        logger.debug("Connecting to database...")
+        app.db = await connect_to_db()
+        logger.info("Connected to database: " + app.db.name)
     except Exception as e:
         logger.error(f'Error connecting to database: {e}')
         sys.exit(1)
-    app.register_blueprint(users_bp)
-    app.register_blueprint(messages_bp)
-    app.register_blueprint(devices_bp)
-    app.register_blueprint(tools_bp)
+
     try:
-        params = json.load(open('./config/ava_params.json'))
-        app.assistant = await Assistant.initialize(params)
+        params = json.load(open('./config/assistant_params.json'))
+        app.assistant = Assistant("Ava", "Wizard-Vicuna-13B-Uncensored-GPTQ", params.get("instructions"))
     except Exception as e:
         logger.error(f'Error initializing assistant: {e}')
         sys.exit(1)
@@ -41,7 +46,7 @@ async def shutdown():
     logger.info("Shutting down server...")
 
 def signal_handler(sig, frame):
-    logger.info("Crtl+C pressed...")
+    logger.debug("Crtl+C pressed...")
     sys.exit(0)
 
 signal.signal(signal.SIGINT, signal_handler)

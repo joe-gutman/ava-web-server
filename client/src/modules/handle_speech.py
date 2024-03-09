@@ -21,6 +21,7 @@ class SpeechHandler:
             'Joanne': 'xYksD5PsEyPnJJEqJsMC'
         }
         self.key_phrases = ['ava', 'eva']
+        self.key_phrase_pattern = re.compile(r'\b(?:' + '|'.join(map(re.escape, self.key_phrases)) + r')\b', re.IGNORECASE)
 
 
         load_dotenv('../.env')
@@ -45,12 +46,13 @@ class SpeechHandler:
                     name=self.chosen_voice,
                     category='premade',
                     settings=VoiceSettings(
-                        stability=0.6,
-                        similarity_boost=0.35,
-                        style=0.15,
+                        stability=0.5,
+                        similarity_boost=0.75,
+                        style=0.1,
+                        use_speaker_boost=True
                     )
                 ),
-                model='eleven_multilingual_v2',
+                model='eleven_turbo_v2',
                 stream=True,
             )
 
@@ -59,22 +61,22 @@ class SpeechHandler:
         except Exception as e:
             logger.error(f'Error in text_to_speech: {e}')
 
-    async def start_listening(self):
-        logger.info('Listening...')
+    async def capture_audio(self):
+        logger.debug('Listening...')
         while True:
             with self.source as source:
                 audio = self.recognizer.listen(source)
-                text = self._listen_callback(audio)
+                text = self._recognize_audio(audio)
                 if text:
                     return text
 
-    def _listen_callback(self, audio):
-        logger.info('Received audio data')
+    def _recognize_audio(self, audio):
+        logger.debug('Received audio data')
         try:
             text = self.recognizer.recognize_google(audio).lower()
             logger.info(f'Recognized: {text}')
-            if any(phrase in text for phrase in self.key_phrases):
-                logger.info(f'Key phrase detected; Returning: {text}')
+            if self.key_phrase_pattern.search(text):
+                logger.debug(f'Key phrase detected; Returning: {text}')
                 return text
             else:
                 return None

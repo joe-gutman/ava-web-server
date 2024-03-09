@@ -57,7 +57,7 @@ async def send_message(request, user_id):
         with open('config/device.json') as f:
             device = json.load(f)
             logger.debug(f"Device: {device}") 
-        logger.info(f"Sending message: {request['data']['content']}")
+        logger.info(f"Sending message: {request['data']['text']}")
         logger.info(f"User: {request['user']}")
         logger.info(f"Device: {device}")
         logger.info(f"Current user: {current_user}")
@@ -65,34 +65,30 @@ async def send_message(request, user_id):
             logger.info('Current user is the same as the request user')
             async with ClientSession() as session:
                 request_data = {
-                    "data": {
-                        "type": "text",
-                        "content": request['data']['content']
-                    }
+                    "type": "text",
+                    "text": request['data']['text']
                 }
                 logger.info(f'Sending request {request_data}')
                 async with session.post(f"http://localhost:5000/messages/user/{current_user['_id']}/device/{device['_id']}", json=request_data) as response:
                     response = await response.json()
                     logger.debug(f"Response: {response}")
 
-                    status = response['status']
                     type = response['data']['type']
-                    if status == 'success' and type == 'text':
-                        response_text = response['data']['content']
+                    if type == 'text':
+                        response_text = response['data']['text']
                         logger.info(f'Response: {response_text}')
                         return {
-                            'status': 'speak',
                             'user': current_user,
                             'data': {
                                 'type': 'text',
-                                'content': response_text
+                                'text': response_text
                             }
                         }, 200
                     else:
                         logger.error(f'Error in response: {response["message"]}')
                         return {
-                            'status': 'error',
-                            'message': response['message']
+                            'type': 'error',
+                            'error': response['message']
                         }, 500
         else:
             logger.error('Current user is not the same as the request user')
