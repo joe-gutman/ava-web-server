@@ -11,9 +11,6 @@ from modules.handle_speech import SpeechHandler
 # This flag will be used to stop the script
 stop_flag = False
 
-# Replace 'MICROPHONE_INDEX' with the index of your microphone
-MICROPHONE_INDEX = 1
-
 load_dotenv()
 
 key_phrases = ['ava', 'eva']
@@ -57,18 +54,18 @@ async def main():
             # Start listening
             logger.info("Starting to listen...")
             try:
-                play_startup_sound()
+                # play_startup_sound()
                 while not stop_flag:
-                    text = await speech.capture_audio()
+                    command = speech.real_time_transcription()
                     
-                    logger.info(f'Sending message: {text}')
+                    logger.info(f'Sending message: {command}')
                     async with ClientSession() as client:
                         formated_request = {
                             "status": "request",
                             "user": current_user,
                             "data": {
                                 "type": "text",
-                                "text": text
+                                "text": command
                             }
                         }
                         logger.info(f'Sending request: {formated_request}')
