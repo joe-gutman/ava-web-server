@@ -13,7 +13,7 @@ stop_flag = False
 
 load_dotenv()
 
-key_phrases = ['ava', 'eva']
+key_phrases = ["ava", "eva"]
 current_user = None
 speech = SpeechHandler()
 
@@ -25,7 +25,7 @@ def play_startup_sound():
 def signal_handler(signal, frame):
     global stop_flag
     stop_flag = True
-    logger.info('Stopping...')
+    logger.info("Stopping...")
     exit(0)
 
 async def main():
@@ -35,19 +35,19 @@ async def main():
 
     # login on the server
     try:
-        username = os.getenv('SERVER_USERNAME')
-        password = os.getenv('SERVER_PASSWORD')
+        username = os.getenv("SERVER_USERNAME")
+        password = os.getenv("SERVER_PASSWORD")
         current_user = None
 
         try: 
             # Login
             async with ClientSession() as client:
-                response = await client.post(f'{client_server_route}/user/login', json={'username': username, 'password': password})
+                response = await client.post(f"{client_server_route}/user/login", json={"username": username, "password": password})
                 response_data = await response.json()
-                current_user = response_data['user']
+                current_user = response_data["user"]
                 logger.info(f"Logged in as: {current_user['username']}")
         except Exception as e:
-            logger.error(f'Error in login: {e}')
+            logger.error(f"Error in login: {e}")
             stop_flag = True
 
         if current_user:
@@ -56,39 +56,45 @@ async def main():
             try:
                 # play_startup_sound()
                 while not stop_flag:
-                    command = speech.real_time_transcription()
-                    
-                    logger.info(f'Sending message: {command}')
-                    async with ClientSession() as client:
-                        formated_request = {
-                            "status": "request",
-                            "user": current_user,
-                            "data": {
-                                "type": "text",
-                                "text": command
-                            }
-                        }
-                        logger.info(f'Sending request: {formated_request}')
-                        response = await client.post(f'{client_server_route}/send_message/{current_user["_id"]}', json=formated_request)
-                        if response is not None:
-                            response_data = await response.json()
-                            logger.info(f'Response: {response_data}')
+                    speech_text = speech.real_time_transcription()
 
-                            # Convert text to speech in asyncio event loop
-                            loop = asyncio.get_event_loop()
-                            await loop.run_in_executor(None, speech.text_to_speech, response_data["data"]["text"])
+                    if speech_text:
+                        logger.info(f"Sending message: {speech_text}")
+                        async with ClientSession() as client:
+                            formated_request = {
+                                "status": "request",
+                                "user": current_user,
+                                "data": {
+                                    "type": "text",
+                                    "text": speech_text
+                                }
+                            }
+                            logger.info(f"Sending request: {formated_request}")
+                            response = await client.post(f"{client_server_route}/send_message/{current_user['_id']}", json=formated_request)
+                            if response is not None:
+                                response_data = await response.json()
+                                if response_data['data']['type'] == "text":
+                                    response_text = response_data['data']['text']
+                                    logger.debug(f"Response text: {response_text}")
+                                    
+                                    if response_text is not None and response_text.lower() != "none":
+                                        # Convert text to speech in async loop
+                                        loop = asyncio.get_event_loop()
+                                        await loop.run_in_executor(None, speech.text_to_speech, response_data["data"]["text"])
 
             except Exception as e:
-                logger.error(f'Error getting speech: {e}')
+                logger.error(f"Error getting speech: {e}")
                 stop_flag = True
         else:
             stop_flag = True
     except Exception as e:
-        logger.error(f'Error in main: {e}')
+        logger.error(f"Error in main: {e}")
         stop_flag = True
 
 # Set the signal handler
 signal.signal(signal.SIGINT, signal_handler)
+
+
 
 signal.signal(signal.SIGTERM, signal_handler)
         

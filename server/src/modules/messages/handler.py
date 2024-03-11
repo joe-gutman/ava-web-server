@@ -66,11 +66,6 @@ class MessageHandler:
             loop = asyncio.get_running_loop()
             assistant_response = await loop.run_in_executor(executor, assistant.interact, request)
             logger.info(f'Assistant response: {pformat(assistant_response)}')
-            if assistant_response is None:
-                return {
-                    "type": "error",
-                    "error": "Assistant failed to respond to request."
-                }, 500
             
             # ------------------------- Build response for client ------------------------ #
             response = {
@@ -78,31 +73,38 @@ class MessageHandler:
                 "device": device,
                 "data": assistant_response
             }
+            error_code = 0
         
             # ---------------------- Handle response from assistant ---------------------- #
-            if assistant_response['type'] == 'text':
-                response['data'] = assistant_response
-                return response, 200
+            if assistant_response is None:
+                response["data"] = {
+                    "type": "error",
+                    "error": "Assistant failed to respond to request. Please try again later."
+                }
+                error_code = 500
             
-            if assistant_response['type'] == 'error':
-                response['data'] = assistant_response
-                return response, 500
+            if assistant_response["type"] == "text" or assistant_response["type"] == None:
+                error_code = 200
+            
+            if assistant_response["type"] == "error":
+                error_code = 500
                 
-            return response, 200
+            logger.debug(f"Response: {response}")    
+            return response, error_code
             
 
         except Exception as e:
-            logger.error(f'Error sending message: {e}')
+            logger.error(f"Error sending message: {e}")
             return {
-                'status': 'error',
-                'message': 'Error sending message',
-                'user': {
-                    '_id': user['_id']
+                "status": "error",
+                "message": "Error sending message",
+                "user": {
+                    "_id": user["_id"]
                 },
-                'device': {
-                    '_id': device['_id']
+                "device": {
+                    "_id": device["_id"]
                 },
-                'data': {
+                "data": {
                     "content": message,
                 }
             }, 500

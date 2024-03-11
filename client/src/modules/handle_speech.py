@@ -15,8 +15,6 @@ from utils.logger import logger
 
 class SpeechHandler:
     def __init__(self, model_name="medium", energy_threshold=1000):
-        self.recognizer = sr.Recognizer()
-        self.source = sr.Microphone(chunk_size=10240)
         self.chosen_voice = 'Maya'
         self.voice_ids = {
             'Rachel':'21m00Tcm4TlvDq8ikWAM', 
@@ -28,7 +26,6 @@ class SpeechHandler:
             'Joanne': 'xYksD5PsEyPnJJEqJsMC'
         }
         self.key_phrases = ['ava', 'eva']
-        self.key_phrase_pattern = re.compile(r'\b(?:' + '|'.join(map(re.escape, self.key_phrases)) + r')\b', re.IGNORECASE)
         self.energy_threshold = energy_threshold
         self.load_model(model_name)
 
@@ -36,6 +33,7 @@ class SpeechHandler:
         set_api_key(os.getenv('ELEVENLABS_API_KEY'))
 
     def setup_audio(self):
+        torch.cuda.empty_cache()
         audio = pyaudio.PyAudio()
         mic_index = None
         for i in range(audio.get_device_count()):
@@ -63,54 +61,56 @@ class SpeechHandler:
             logger.debug("Moved whisper model to cuda")
             self.audio_model.cuda() 
 
-    def real_time_transcription(self, record_timeout=2, phrase_timeout=3):
+    def real_time_transcription(self, record_timeout=2):
         self.setup_audio()
 
-        data_queue = Queue()
-        transcription = ['']
+        incoming_audio = []
+        translated_text = ""
+        
+        is_speaking = False
+        speech_start_time = None
+        silence_threshold = 2.5  # seconds of silence to consider speech ended
 
         def record_callback(_, audio: sr.AudioData):
-            data = audio.get_raw_data()
-            data_queue.put(data)
+            nonlocal is_speaking, speech_start_time
+            incoming_audio.append(audio.get_raw_data())
+            is_speaking = True
+            speech_start_time = time.time()
 
-        self.recorder.listen_in_background(self.source, record_callback, phrase_time_limit=record_timeout)
+        self.recorder.listen_in_background(self.source, record_callback, phrase_time_limit=2)
 
-        transcription = ['']
+        try:
+            while True:
+                if len(incoming_audio) > 0:
+                    combined_audio = b''.join(incoming_audio)
+                    incoming_audio = []
 
-        queue_empty_flag = False
-
-        while True:
-            try:
-                if not data_queue.empty():
-                    queue_empty_flag = False
-
-                    audio_data = b''.join(data_queue.queue)
-                    data_queue.queue.clear()
-
-                    audio_np = np.frombuffer(audio_data, dtype=np.int16).astype(np.float32) / 32768.0
-
-                    result = self.audio_model.transcribe(audio_np, fp16=torch.cuda.is_available())
+                    audio_np = np.frombuffer(combined_audio, dtype=np.int16)
+                    result = self.audio_model.transcribe(audio_np.astype(np.float32) / 32768.0, fp16=torch.cuda.is_available())
                     text = result['text'].strip()
+                    logger.debug(f"STT Chunk: {text}")
+                    translated_text += " " + text
 
-                    transcription.append(text)
-
-                    # os.system('cls' if os.name == 'nt' else 'clear')
-                    logger.debug(f"STT: {transcription[-1]}")
-                    print(transcription[-1])
-
-                elif not queue_empty_flag:
-                    combined_transcript = ' '. join(transcription)
-                    logger.debug(f"Entire Transcription: {combined_transcript}")
-                    match = self.key_phrase_pattern.search(combined_transcript)
-                    if match:
-                        logger.debug(combined_transcript)
-                        return combined_transcript 
-                    transcription = ['']
-                    queue_empty_flag = True
+                elif is_speaking is True and time.time() - speech_start_time > silence_threshold: 
+                    is_speaking = False
+                    logger.debug(f"Full STT: {translated_text}")
+                    return translated_text
+                    # check for keyword
+                    # if any(key_phrase in translated_text.lower() for key_phrase in self.key_phrases):
+                    #     return translated_text
+                    # else:
+                    #     return None 
 
                 time.sleep(0.1)
-            except KeyboardInterrupt:
-                break
+
+        except KeyboardInterrupt:
+            pass
+        except Exception as e:
+            logger.error(f"Error handling speech: {e}")
+
+
+
+
 
     def text_to_speech(self, text):
         load_dotenv('../.env')
