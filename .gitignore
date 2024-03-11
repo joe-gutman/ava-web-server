@@ -1,5 +1,6 @@
 # submodules
-.\server\src\assistant\models\
+server/src/assistant/models/
+
 
 # workspaces
 *.code-workspace
