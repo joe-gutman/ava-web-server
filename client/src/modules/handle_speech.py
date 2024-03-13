@@ -7,6 +7,7 @@ import speech_recognition as sr
 import whisper
 import torch
 import webrtcvad
+import traceback
 from datetime import datetime, timedelta
 from queue import Queue
 from dotenv import load_dotenv
@@ -28,6 +29,8 @@ class SpeechHandler:
         self.key_phrases = ['ava', 'eva']
         self.energy_threshold = energy_threshold
         self.load_model(model_name)
+        self.vad = webrtcvad.Vad()
+        self.vad.set_mode(3)  # Aggressive mode for VAD
 
         load_dotenv('../.env')
         set_api_key(os.getenv('ELEVENLABS_API_KEY'))
@@ -69,13 +72,42 @@ class SpeechHandler:
         
         is_speaking = False
         speech_start_time = None
-        silence_threshold = 2.5  # seconds of silence to consider speech ended
+        silence_threshold = 3  # seconds of silence to consider speech ended
+
+        import numpy as np
 
         def record_callback(_, audio: sr.AudioData):
+            # ADD NOISE REDUCTION
+            # 
+            # 
+            # 
             nonlocal is_speaking, speech_start_time
-            incoming_audio.append(audio.get_raw_data())
-            is_speaking = True
-            speech_start_time = time.time()
+            raw_audio = audio.get_raw_data()
+            has_speech = False
+
+            sample_rate = 16000
+            frame_duration = 20 # ms
+            num_samples_per_frame = int(sample_rate * frame_duration / 1000)
+
+            try:
+                raw_audio_np = np.frombuffer(raw_audio, dtype=np.int16)
+                logger.debug(f"Raw audio length: {len(raw_audio_np)}")
+                for i in range(0, len(raw_audio_np), num_samples_per_frame):
+                    frame = raw_audio_np[i:i + num_samples_per_frame]
+                    if len(frame) < num_samples_per_frame:
+                        frame = np.pad(frame, (0, num_samples_per_frame - len(frame)), mode='constant')
+                    logger.debug(f"Frame length: {len(frame)}")
+                    has_speech = self.vad.is_speech(frame, sample_rate)
+                    if has_speech:
+                        break
+            except Exception as e:
+                logger.error(f"Error in VAD processing: {e}")
+
+            if has_speech:
+                incoming_audio.append(raw_audio)
+                is_speaking = True
+                speech_start_time = time.time()
+
 
         self.recorder.listen_in_background(self.source, record_callback, phrase_time_limit=2)
 

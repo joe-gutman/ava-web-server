@@ -19,15 +19,7 @@ class Assistant():
         self.max_response_tokens = 500
         self.text_generation_params = {
             "max_new_tokens": 500,
-            # "temperature": 0.5,
-            # "top_k": 40,
-            # "top_p": 0.7,
             "repetition_penalty": 1.2,
-            # "no_repeat_ngram_size": 1,
-            # "length_penalty": 0.75,
-            # "diversity_penalty": 0.6,
-            # "num_beams": 1,
-            # "num_beam_groups": 1,
         }
 
         if self.model_name is None:
@@ -149,87 +141,98 @@ class Assistant():
         
     def check_if_triggered(self, interaction):
 
-        user = interaction['user']['first_name']
-        message = interaction['data']['text']
+        user = interaction['user']['first_name'].lower()
+        message = interaction['data']['text'].lower()
         
         #percent that trigger rating has to be to count as a trigger for the assistant
         trigger_rating_min = 70 
 
         try:
-            prompt = f"""
-            <<SYS>>
-            You are an AI assistant for another AI assistant named {self.name}. Your task is to analyze user messages and determine if they are requesting assistance. Rate the likelihood on a scale of 0 to 100, where 0 means no request and 100 means a definite request. A message directly addressed to the assistant with a clear request should generally receive a higher rating, even if the task is not typical. Respond with a trigger rating and a rationale.
-
+            trigger_prompt = f"""
+            Instructions:
+            You are helping an AI assistant named "{self.name}", or mispellings that seem similar. Your task is to analyze user messages and determine if they are talking to {self.name}. Respond with true if the message is for {self.name} and false otherwise. Only respond with the word "true" or the word "false".
+        
             Examples:
             Message: "Ava, what's the weather?"
-            Assistant: {{"trigger_rating": "95", "rationale": "The user directly addresses the assistant and asks a question, indicating they are talking to the AI."}}
+            Response: true
 
             Message: "Can you take a look at this, I'm not sure what John wants."
-            Assistant: {{"trigger_rating": "40", "rationale": "The message suggests a request for help but is unclear if it's directed at the AI or a person."}}
+            Response: false
 
             Message: "Just finished reading a great book on gardening!"
-            Assistant: {{"trigger_rating": "0", "rationale": "This is a statement with no indication of talking to the AI."}}
+            Response: false
 
             Message: "Can you help me find a good recipe for lasagna?"
-            Assistant: {{"trigger_rating": "85", "rationale": "The user is asking for help, which suggests they are talking to the AI."}}
+            Response: true
 
             Message: "I'm thinking of making pasta for dinner."
-            Assistant: {{"trigger_rating": "10", "rationale": "A personal statement with no clear indication of talking to the AI."}}
+            Response: false
 
-            Message: "Ava, remind me to call Mom tomorrow."
-            Assistant: {{"trigger_rating": "95", "rationale": "The user directly addresses the assistant with a request, indicating they are talking to the AI."}}
+            Message: "Eva, remind me to call Mom tomorrow."
+            Response: true
 
             Message: "I wonder what the capital of France is."
-            Assistant: {{"trigger_rating": "50", "rationale": "A question that an AI can answer, but it's phrased as a personal musing rather than directly talking to the AI."}}
+            Response: false
 
             Message: "I'm not sure what to do about this issue at work."
-            Assistant: {{"trigger_rating": "30", "rationale": "Expresses uncertainty but it's unclear if the user is talking to the AI."}}
+            Response: false
 
             Message: "Please turn off the lights."
-            Assistant: {{"trigger_rating": "85", "rationale": "A command that could be directed at a smart home assistant, suggesting the user is talking to the AI."}}
+            Response: true
 
-            Message: "Ava, how do I fix a leaky faucet?"
-            Assistant: {{"trigger_rating": "90", "rationale": "The user directly addresses the AI and asks for assistance, indicating they are talking to the AI."}}
+            Message: "Eva, how do I fix a leaky faucet?"
+            Response: true
 
             Message: "What do you think about the latest AI advancements?"
-            Assistant: {{"trigger_rating": "90", "rationale": "The user poses a question likely aimed at engaging in conversation with the AI, indicating direct communication."}}
+            Response: true
 
             Message: "Do you get tired of answering questions?"
-            Assistant: {{"trigger_rating": "90", "rationale": "A direct question to the AI about its experiences, indicating the user is talking to the AI."}}
+            Response: true
 
             Message: "How's your day going, Ava?"
-            Assistant: {{"trigger_rating": "98", "rationale": "The user directly addresses the AI in a conversational manner, clearly indicating they are talking to the AI."}}
+            Response: true
 
-
-            <</SYS>>
-
-
+            ---
+            Use past conversation when deciding whether the message is for the assistant or not. 
+            {self.active_conversation.get_conversation(500)}...
+            ---
+                        
             Message: "{message}"
-            Assistant:"""
+            Response:"""
             logger.debug(f"Generating response for: {message}")
 
             pipeline = TextGenerationPipeline(self.model, self.tokenizer)
-            outputs = pipeline(prompt, **self.text_generation_params)
+            outputs = pipeline(trigger_prompt, max_new_tokens = 2)
 
             # Split the generated text at the stop tokens and take the first part
             generated_text = outputs[0]['generated_text']
             logger.debug(f"Generated text: {generated_text}")
-            response_index = generated_text.rindex("Assistant:")
-            generated_text = json.loads(generated_text[response_index + len("Assistant:"):])
+            response_index = generated_text.rindex("Response:")
+            generated_text = generated_text[response_index + len("Response:"):]
             logger.debug(f'Message: {message} \n Response: {generated_text}')
 
-            if int(generated_text["trigger_rating"]) >= trigger_rating_min:
-                return True
-            return False
+            if isinstance(generated_text, bool):
+                triggered = generated_text
+                return triggered
+            else:
+                generated_text = generated_text.strip().lower()
+                if generated_text == "true" or generated_text == "false":
+                    triggered = generated_text == "true"
+                    return triggered
+                else:
+                    logger.debug(f"Unexpected response: {generated_text}")
+                    return None
         except Exception as e:
             logger.error(e)
+
+    # def generate_text(prompt, interaction)
         
         
 class Conversation:
     def __init__(self, name, prompt, model, tokenizer, text_generation_params, age_limit=None):
         self.id = uuid.uuid4()
         self.name = name
-        self.conversation_prompt = prompt
+        self.system_prompt = prompt
         self.model = model
         self.tokenizer = tokenizer
         self.interaction_history = []
@@ -242,9 +245,18 @@ class Conversation:
     def __repr__(self):
         return f'<Conversation {self.name}:{self.id} >'
 
-    def get_interactions(self):
-        interactions = '''{}'''.format('\n'.join(self.interaction_history))
+    def get_conversation(self, token_limit = None):
+        logger.debug(f"token_limit: {token_limit}")
+        interactions = '\n'.join(self.interaction_history)
+        if token_limit is not None:
+            tokens = self.tokenizer(interactions)
+            num_tokens = len(tokens)
+            if num_tokens > token_limit:
+                logger.debug(f"Tokenized Interactions: {interactions}")
+                interactions = ' '.join(tokens[:token_limit])
+                logger.debug(f"Interactions: {interactions}")
         return interactions
+
     
     def get_age(self):
         self.age = (time.time() - self.start_time) / 60  # Convert age to minutes
@@ -273,11 +285,14 @@ class Conversation:
 
     def _generate_response(self, message, user):
         try:
+            past_interactions = self.get_conversation(token_limit = 750)
+
             prompt = f"""
-            <<SYS>>
-            {self.conversation_prompt}
-            <</SYS>>
-            {self.get_interactions()}
+            {self.system_prompt}
+            Past Conversation:
+            {past_interactions}
+
+            Current Interaction:
             {user}: {message}
             Assistant:"""
 
@@ -295,6 +310,7 @@ class Conversation:
             response_index = generated_text.rindex("Assistant:")
             generated_text = generated_text[response_index + len("Assistant:"):]
 
+            
             logger.debug(f"Generated in: {round(time.time() - generate_start)} seconds")
 
             return generated_text
