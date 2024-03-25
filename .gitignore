@@ -1,6 +1,10 @@
 # submodules
-server/src/assistant/models/
-
+server/src/assistant/models/*
+server/src/logs/*
+client/models/*
+client/ouputs/*
+client/voice_samples/*
+client/logs/*
 
 # workspaces
 *.code-workspace

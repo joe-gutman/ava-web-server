@@ -35,8 +35,7 @@ async def startup():
         sys.exit(1)
 
     try:
-        assistant_params = json.load(open('./config/assistant_params.json'))
-        app.assistant = Assistant(assistant_params)
+        app.assistant = Assistant()
     except Exception as e:
         logger.error(f'Error initializing assistant: {e}')
         sys.exit(1)

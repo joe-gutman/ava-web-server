@@ -122,7 +122,7 @@ async def get_weather(location, unit, time, api_key, language = 'en'):
             'content': f'Error getting weather: {e}'
         }}
 
-from utils.logger import logger
+# from utils.logger import logger
 
 async def main(user, unit = None, location = None, time = None):
     logger.info(f"Running main function with user: {user}, unit: {unit}, location: {location}, time: {time}")
@@ -135,3 +135,155 @@ async def main(user, unit = None, location = None, time = None):
     except Exception as e:
         logger.error(f"Error running tool get_weather: {e}")
         return {'response': f'Error running tool get_weather: {e}'}
+    
+get_weather = main
+
+call_format = """
+{
+    "function_name": "get_weather",
+    "description": "Called when the user wants to get the weather for a location, at a specific or non specific time." 
+    "arguments": {
+        "unit": "the unit to get the weather in 'f' or 'c', for farenheit or celcius.",
+        "location": "the location to get the weather from.",
+        "time": "the day or time of day to get the weather from, can be a specific time and day in the future or time of the current day."
+    }
+}
+"""
+examples = [
+    {
+        "user_message": """{ "current_date":"Saturday March 23,2024 12:00:00", "message":"Hey Ava what's the weather?"}""",
+        "response": """{
+            "function_name": "get_weather",
+            "arguments": {
+                "unit": "",
+                "location": "",
+                "time":""
+            }
+        }"""
+    },
+    {
+        "user_message" : """{ "current_date":"Saturday March 23,2024 12:00:00", "message":"Hey Ava what's the weather in New York tomorrow?"}""",
+        "response": """{
+            "function_name": "get_weather",
+            "arguments": {
+                "unit": "",
+                "location": "New York",
+                "time":"3-24-2024"
+            }
+        }"""
+    },
+    {
+        "user_message": """{ "current_date":"Saturday March 23,2024 12:00:00", "message":"Hey Ava what's the weather in Paris on Friday?"}""",
+        "response": """{
+            "function_name": "get_weather",
+            "arguments": {
+                "unit": "",
+                "location": "Paris",
+                "time":"3-25-2024"
+            }
+        }"""
+    },
+    {
+        "user_message": """{ "current_date":"Saturday March 23,2024 12:00:00", "message":"Hey Ava what's the weather in London on March 26th?"}""",
+        "response": """{
+            "function_name": "get_weather",
+            "arguments": {
+                "unit": "",
+                "location": "London",
+                "time":"3-26-2024"
+            }
+        }"""
+    },
+    {
+        "user_message": """{ "current_date":"Saturday March 23,2024 12:00:00", "message":"Hey Ava what's the weather in Berlin on Wednesday at 3 PM?"}""",
+        "response": """{
+            "function_name": "get_weather",
+            "arguments": {
+                "unit": "",
+                "location": "Berlin",
+                "time":"3-27-2024 15:00:00"
+            }
+        }"""
+    },
+    {
+        "user_message": """{ "current_date":"Saturday March 23,2024 12:00:00", "message":"Hey Ava what's the weather in Sydney tomorrow?"}
+        """,
+        "response": """
+            {
+                "function_name": "get_weather",
+                "arguments": {
+                    "unit": "",
+                    "location": "Sydney",
+                    "time":"3-24-2024"
+                }
+            }
+        """
+    },
+    {
+        "user_message": """{ "current_date":"Saturday March 23,2024 12:00:00", "message":"Hey Ava what's the weather in Tokyo on March 28th?"}""",
+        "response": """
+            {
+                "function_name": "get_weather",
+                "arguments": {
+                    "unit": "",
+                    "location": "Tokyo",
+                    "time":"3-28-2024"
+                }
+            }
+        """
+    },
+    {
+        "user_message": """{ "current_date":"Saturday March 23,2024 12:00:00", "message":"Hey Ava what's the weather in Rome on Thursday at 10 AM?"}""",
+        "response": """
+            {
+                "function_name": "get_weather",
+                "arguments": {
+                    "unit": "",
+                    "location": "Rome",
+                    "time":"3-29-2024 10:00:00"
+                }
+            }
+        """
+    },
+    {
+        "user_message": """{ "current_date":"Saturday March 23,2024 12:00:00", "message":"Hey Ava what's the weather in London tomorrow in Celsius?"}""",
+        "response": """
+            {
+                "function_name": "get_weather",
+                "arguments": {
+                    "unit": "c",
+                    "location": "London",
+                    "time":"3-24-2024"
+                }
+            }
+        """
+    },
+    {
+        "user_message": """{ "current_date":"Saturday March 23,2024 12:00:00", "message":"Hey Ava what's the weather in Paris on March 28th in Fahrenheit?"}""",
+        "response": """
+            {
+                "function_name": "get_weather",
+                "arguments": {
+                    "unit": "f",
+                    "location": "Paris",
+                    "time":"3-28-2024"
+                }
+            }
+        """
+    },
+    {
+        "user_message": """{ "current_date":"Saturday March 23,2024 12:00:00", "message":"Hey Ava what's the weather at 2pm?"}""",
+        "response": """
+            {
+                "function_name": "get_weather",
+                "arguments": {
+                    "unit": "",
+                    "location": "",
+                    "time":"3-23-2024 14:00:00"
+                }
+            }
+        """
+    }
+]
+
+

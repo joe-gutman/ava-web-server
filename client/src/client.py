@@ -3,19 +3,18 @@ import asyncio
 import signal
 import os
 import pygame
+import traceback
 from dotenv import load_dotenv
 from utils.logger import logger
-from modules.handle_speech import SpeechHandler
+from modules.communication_handler import SpeechHandler_TTS as SpeechHandler
+from modules.communication_handler import ListenHandler
+
 
 
 # This flag will be used to stop the script
 stop_flag = False
 
 load_dotenv()
-
-key_phrases = ["ava", "eva"]
-current_user = None
-speech = SpeechHandler()
 
 def play_startup_sound():
     pygame.mixer.init()
@@ -29,9 +28,10 @@ def signal_handler(signal, frame):
     exit(0)
 
 async def main():
-    global stop_flag    
-    global current_user
+    global stop_flag
     client_server_route = "http://10.0.0.229:5001/"
+    speech = SpeechHandler()
+    listen = ListenHandler()
 
     # login on the server
     try:
@@ -56,7 +56,7 @@ async def main():
             try:
                 # play_startup_sound()
                 while not stop_flag:
-                    speech_text = speech.real_time_transcription()
+                    speech_text = listen.realtime_stt()
 
                     if speech_text:
                         logger.info(f"Sending message: {speech_text}")
@@ -78,9 +78,7 @@ async def main():
                                     logger.debug(f"Response text: {response_text}")
                                     
                                     if response_text is not None and response_text.lower() != "none":
-                                        # Convert text to speech in async loop
-                                        loop = asyncio.get_event_loop()
-                                        await loop.run_in_executor(None, speech.text_to_speech, response_data["data"]["text"])
+                                        await speech.run(response_data["data"]["text"])
 
             except Exception as e:
                 logger.error(f"Error getting speech: {e}")
