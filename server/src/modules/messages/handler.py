@@ -63,8 +63,7 @@ class MessageHandler:
             }
 
             # -------------- Send request to assistant and wait for response -------------- #
-            loop = asyncio.get_running_loop()
-            assistant_response = await loop.run_in_executor(executor, assistant.interact, request)
+            assistant_response = await assistant.interact(request)
             logger.info(f'Assistant response: {pformat(assistant_response)}')
             
             # ------------------------- Build response for client ------------------------ #

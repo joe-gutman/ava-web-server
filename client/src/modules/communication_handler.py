@@ -15,8 +15,93 @@ from random import randrange
 from utils.logger import logger
 from TTS.api import TTS
 from threading import Lock
-# from .tts import generate_audio
 
+
+class ListenHandler_Google:
+    def __init__(self, energy_threshold=1550):
+        self.key_phrases = ['ava', 'eva']
+        self.energy_threshold = energy_threshold
+        self.vad = webrtcvad.Vad()
+        self.vad.set_mode(3)  # Aggressive mode for VAD
+
+    def setup_audio(self):
+        self.source = sr.Microphone(sample_rate=24000)
+        self.recorder = sr.Recognizer()
+        self.recorder.energy_threshold = self.energy_threshold
+        self.recorder.dynamic_energy_threshold = False
+
+        with self.source as source:
+            self.recorder.adjust_for_ambient_noise(source)
+
+    def realtime_stt(self, record_timeout=2):
+        self.setup_audio()
+
+        incoming_audio = []
+        translated_text = ""
+        
+        is_speaking = False
+        speech_start_time = None
+        silence_threshold = 3  # seconds of silence to consider speech ended
+
+        def record_callback(_, audio: sr.AudioData):
+            nonlocal is_speaking, speech_start_time
+            raw_audio = audio.get_raw_data()
+            has_speech = False
+
+            sample_rate = 16000
+            frame_duration = 20  # ms
+            num_samples_per_frame = int(sample_rate * frame_duration / 1000)
+
+            try:
+                raw_audio_np = np.frombuffer(raw_audio, dtype=np.int16)
+                for i in range(0, len(raw_audio_np), num_samples_per_frame):
+                    frame = raw_audio_np[i:i + num_samples_per_frame]
+                    if len(frame) < num_samples_per_frame:
+                        frame = np.pad(frame, (0, num_samples_per_frame - len(frame)), mode='constant')
+                    has_speech = self.vad.is_speech(frame, sample_rate)
+                    if has_speech:
+                        break
+            except Exception as e:
+                logger.error(f"Error in VAD processing: {e}")
+
+            if has_speech:
+                incoming_audio.append(raw_audio)
+                is_speaking = True
+                speech_start_time = time.time()
+
+        self.recorder.listen_in_background(self.source, record_callback, phrase_time_limit=2)
+
+        try:
+            while True:
+                if len(incoming_audio) > 0:
+                    combined_audio = b''.join(incoming_audio)
+                    incoming_audio = []
+
+                    audio = sr.AudioData(combined_audio, 24000, 2)
+                    try:
+                        text = self.recorder.recognize_google(audio)
+                    except sr.UnknownValueError:
+                        text = ""
+                    logger.debug(f"STT Chunk: {text}")
+                    translated_text += " " + text
+
+                elif is_speaking is True and time.time() - speech_start_time > silence_threshold: 
+                    is_speaking = False
+                    logger.debug(f"Full STT: {translated_text}")
+                    if len(translated_text) > 0:
+                        if 'eva' in translated_text.lower():
+                            translated_text.replace('eva', 'ava')
+                        if any(key_phrase in translated_text.lower() for key_phrase in self.key_phrases):
+                            return translated_text
+                        else:
+                            return None 
+
+                time.sleep(0.1)
+
+        except KeyboardInterrupt:
+            pass
+        except Exception as e:
+            logger.error(f"Error handling speech: {e}")
 
 class ListenHandler:
     def __init__(self, model_name="medium", energy_threshold=1550):
@@ -138,7 +223,7 @@ class SpeechHandler_TTS:
     def __init__(self):
         self.script_dir = os.path.dirname(__file__)
         self.save_dir = os.path.join(self.script_dir, "..", "outputs")
-        self.audio_samples = self.get_voice_samples()
+        self.audio_samples = self.get_voice_samples(filename="female_02.wav")
         self.audio_rate = 24000
         self.queue = []
         self.tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2")
@@ -148,45 +233,25 @@ class SpeechHandler_TTS:
 
         self.tts.to(self.device)
 
-        # if wav_opt:
-        #     # Save the converted WAV
-        #     with open(output_wav_path, 'wb') as f:
-        #         f.write(wav_opt[1][0])
-        # else:
-        #     raise RuntimeError("Failed to perform voice conversion")
-
     async def convert_tts(self, text):
         sentences = self.split_text_sentences(text)
-        # temp_wav_path = os.path.join(self.script_dir, self.save_dir, 'temp', f"temp_output_{randrange(0, 123456789)}.wav")
+
+        logger.debug(f"Text to convert: {text}")
 
         for sentence in sentences:
-            if len(re.sub(r'[^a-zA-Z0-9]', '', string)) > 1:
-                audio = await asyncio.to_thread(
-                    self.tts.tts,
-                    text=sentence,
-                    speaker_wav=self.get_voice_samples(filename=""),
-                    language="en",
-                    split_sentences=False
-                )
+            audio = await asyncio.to_thread(
+                self.tts.tts,
+                text=sentence,
+                speaker_wav=self.get_voice_samples(),
+                # speaker = "emma", 
+                language="en",
+                split_sentences=False
+            )
 
-                with self.lock:
-                    self.queue.append(audio)
+            with self.lock:
+                self.queue.append(audio)
 
         self.all_sentences_processed = True
-
-        # ------------------ Experimental nonworking RVC integration ----------------- #
-        # Error: Audio is played at a slower rate than the audio file specifies
-        # Error: Played audio reflects XTTS model instead of the expected RVC model 
-        # 
-        # audio = generate_audio(
-        #     text=sentences[0],
-        #     tts_output_dir=os.path.join(self.script_dir, self.save_dir,'temp'),
-        #     speaker_name="speaker2",
-        #     emotion="Surprise",
-        #     speed=1.0
-        # )
-
-        # self.queue.append(audio)
 
     def is_punctuation(self, word):
         # Check if the word consists only of punctuation characters

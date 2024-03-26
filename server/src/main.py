@@ -1,3 +1,4 @@
+import cohere
 import os
 import sys
 import json
@@ -12,9 +13,8 @@ from modules.devices.routes import bp as devices_bp
 from modules.tools.routes import bp as tools_bp
 from db_connection import connect_to_db
 
-os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
-
 app = Quart(__name__)
+
 load_dotenv()
 
 @app.before_serving
