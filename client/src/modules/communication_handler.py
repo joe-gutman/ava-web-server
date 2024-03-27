@@ -1,21 +1,21 @@
-import os
-import re
-import time
-import pyaudio
-import asyncio
-import string
-import numpy as np
-import speech_recognition as sr
-import whisper
-import torch
-import webrtcvad
-import torch
-import glob
-from random import randrange
+import os, re, time, asyncio
+from threading import Lock
+from dotenv import load_dotenv
+from signal import SIGTERM, SIGINT
+
+import numpy as np, pyaudio, boto3
+import speech_recognition as sr, webrtcvad, glob, torch
+
 from utils.logger import logger
 from TTS.api import TTS
-from threading import Lock
+from deepgram import (
+    DeepgramClient,
+    LiveTranscriptionEvents,
+    LiveOptions,
+)
+import whisper
 
+load_dotenv()
 
 class ListenHandler_Google:
     def __init__(self, energy_threshold=1550):
@@ -33,7 +33,7 @@ class ListenHandler_Google:
         with self.source as source:
             self.recorder.adjust_for_ambient_noise(source)
 
-    def realtime_stt(self, record_timeout=2):
+    def start_transcription(self, record_timeout=2):
         self.setup_audio()
 
         incoming_audio = []
@@ -103,9 +103,9 @@ class ListenHandler_Google:
         except Exception as e:
             logger.error(f"Error handling speech: {e}")
 
-class ListenHandler:
+class ListenHandler_Whisper:
     def __init__(self, model_name="medium", energy_threshold=1550):
-        self.key_phrases = ['ava', 'eva']
+        self.key_phrases = ['ava']
         self.energy_threshold = energy_threshold
         self.load_model(model_name)
         self.vad = webrtcvad.Vad()
@@ -140,7 +140,7 @@ class ListenHandler:
             logger.debug("Moved whisper model to cuda")
             self.audio_model.cuda() 
 
-    def realtime_stt(self, record_timeout=2):
+    def start_transcription(self, record_timeout=2):
         self.setup_audio()
 
         incoming_audio = []
@@ -202,9 +202,11 @@ class ListenHandler:
                 elif is_speaking is True and time.time() - speech_start_time > silence_threshold: 
                     is_speaking = False
                     logger.debug(f"Full STT: {translated_text}")
-                    if len(translated_text) > 0:
+                    translated_text_filtered = ''.join(char for char in translated_text if char.isalpha())
+
+                    if len(translated_text_filtered) > 0:
                         if 'eva' in translated_text.lower():
-                            translated_text.replace('eva', 'ava')
+                            translated_text = translated_text.replace('eva', 'ava')
                         # return translated_text
                         # check for keyword
                         if any(key_phrase in translated_text.lower() for key_phrase in self.key_phrases):
@@ -219,11 +221,127 @@ class ListenHandler:
         except Exception as e:
             logger.error(f"Error handling speech: {e}")
 
-class SpeechHandler_TTS:
+
+class ListenHandler_Deepgram:
+    def __init__(self):
+        self.deepgram = DeepgramClient()
+        self.dg_connection = self.deepgram.listen.live.v("1")
+        self.current_transcript = ""
+        self.options = LiveOptions(
+                model="nova-2",
+                punctuate=True,
+                language="en-US",
+                encoding="linear16",
+                channels=1,
+                sample_rate=16000,
+                interim_results=True,
+                utterance_end_ms="1000",
+                vad_events=True,
+            )
+        self.setup_listeners()
+
+    def setup_listeners(self):
+        # Define event handlers
+        def on_open(self, event, **kwargs):
+            print(f"\n\n{event}\n\n")
+
+        def on_message(self, result, **kwargs):
+            sentence = result.channel.alternatives[0].transcript
+            if len(sentence) == 0:
+                return
+            else:
+                self.current_transcript += f" {sentence}"
+            print(f"speaker: {sentence}")
+
+        def on_metadata(self, metadata, **kwargs):
+            print(f"\n\n{metadata}\n\n")
+
+        def on_speech_started(self, speech_started, **kwargs):
+            print(f"\n\n{speech_started}\n\n")
+            # Reset the current transcript when speech starts
+            self.current_transcript = ""
+
+        def on_error(self, error, **kwargs):
+            print(f"\n\n{error}\n\n")
+
+        def on_close(self, close, **kwargs):
+            print(f"\n\n{close}\n\n")
+
+        # Assign event handlers
+        self.dg_connection.on(LiveTranscriptionEvents.Open, on_open)
+        self.dg_connection.on(LiveTranscriptionEvents.Transcript, on_message)
+        self.dg_connection.on(LiveTranscriptionEvents.Metadata, on_metadata)
+        self.dg_connection.on(LiveTranscriptionEvents.SpeechStarted, on_speech_started)
+        self.dg_connection.on(LiveTranscriptionEvents.Error, on_error)
+        self.dg_connection.on(LiveTranscriptionEvents.Close, on_close)
+
+    async def detect_speech_with_vad(self):
+        vad = webrtcvad.Vad()
+        vad.set_mode(3)  # Aggressive mode
+        chunk = 320  # 20ms audio chunks for VAD
+
+        p = pyaudio.PyAudio()
+        stream = p.open(format=pyaudio.paInt16,
+                        channels=1,
+                        rate=16000,
+                        input=True,
+                        frames_per_buffer=chunk)
+
+        is_speech = False
+        silence_frames_threshold = int(0.5 * 16000)  # Number of frames for 0.5 seconds
+        silence_frames_count = 0
+
+        try:
+            async for data in self.audio_data_generator(stream, chunk):
+                if vad.is_speech(data, sample_rate=16000):
+                    # Speech detected
+                    if not is_speech:
+                        print("--- SPEECH DETECTED ---")
+                        is_speech = True
+                        self.dg_connection.start(self.options)
+                        # Reset the silence frames count
+                        silence_frames_count = 0
+                else:
+                    # Silence detected
+                    if is_speech:
+                        silence_frames_count += 1
+                        if silence_frames_count >= silence_frames_threshold:
+                            print("--- SPEECH ENDED ---")
+                            is_speech = False
+                            silence_frames_count = 0
+                            self.dg_connection.finish()
+                            # Reset the silence frames count
+
+        except asyncio.CancelledError:
+            raise  # Re-raise the CancelledError to propagate the cancellation
+
+        finally:
+            # Cleanup
+            stream.stop_stream()
+            stream.close()
+            p.terminate()
+
+    async def audio_data_generator(self, stream, chunk):
+        while True:
+            data = await self.async_stream_read(stream, chunk)
+            if not data:
+                break
+            yield data
+
+    async def async_stream_read(self, stream, chunk):
+        return stream.read(chunk)
+
+    async def start_transcription(self):
+        await self.detect_speech_with_vad()
+
+
+
+
+class SpeechHandler_XTTS:
     def __init__(self):
         self.script_dir = os.path.dirname(__file__)
         self.save_dir = os.path.join(self.script_dir, "..", "outputs")
-        self.audio_samples = self.get_voice_samples(filename="female_02.wav")
+        self.audio_samples = self.get_voice_samples(filename="tests_data_ljspeech_wavs_LJ001-0031.wav")
         self.audio_rate = 24000
         self.queue = []
         self.tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2")
@@ -323,3 +441,34 @@ class SpeechHandler_TTS:
             self.convert_tts(text),
             self.play_audio_loop()
         )
+
+class SpeechHandler_Polly:
+    def __init__(self, region_name='us-east-1'):
+        self.script_dir = os.path.dirname(__file__)
+        self.polly_client = boto3.client('polly', 
+                                         region_name=region_name, 
+                                         aws_access_key_id=os.environ.get('AWS_ACCESS_KEY'), 
+                                         aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'))
+        self.audio = pyaudio.PyAudio()
+        self.stream = self.audio.open(format=pyaudio.paInt16,
+                                      channels=1,
+                                      rate=16000,
+                                      output=True)
+        self.lock = asyncio.Lock()
+
+    async def convert_tts(self, text, voice_id='Salli'):
+        response = self.polly_client.synthesize_speech(
+            Text=text,
+            OutputFormat='pcm',
+            VoiceId=voice_id,
+            Engine='neural'
+        )
+        async with self.lock:
+            while True:
+                data = response['AudioStream'].read(1024)
+                if not data:
+                    break
+                self.stream.write(data)
+
+    async def run(self, text):
+        await self.convert_tts(text)

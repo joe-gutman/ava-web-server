@@ -6,8 +6,11 @@ import pygame
 import traceback
 from dotenv import load_dotenv
 from utils.logger import logger
-from modules.communication_handler import SpeechHandler_TTS as SpeechHandler
-from modules.communication_handler import ListenHandler
+from modules.communication_handler import ListenHandler_Google
+from modules.communication_handler import ListenHandler_Whisper
+from modules.communication_handler import ListenHandler_Deepgram
+from modules.communication_handler import SpeechHandler_XTTS
+from modules.communication_handler import SpeechHandler_Polly
 
 
 
@@ -30,8 +33,9 @@ def signal_handler(signal, frame):
 async def main():
     global stop_flag
     client_server_route = "http://10.0.0.229:5001/"
-    speech = SpeechHandler()
-    listen = ListenHandler()
+    # listen = ListenHandler_Deepgram()
+    listen = ListenHandler_Deepgram()
+    speech = SpeechHandler_Polly()
 
     # login on the server
     try:
@@ -54,35 +58,34 @@ async def main():
             # Start listening
             logger.info("Starting to listen...")
             try:
-                # play_startup_sound()
-                while not stop_flag:
-                    speech_text = listen.realtime_stt()
+                speech_text = await listen.start_transcription()
+            except KeyboardInterrupt:
+                pass
 
-                    if speech_text:
-                        logger.info(f"Sending message: {speech_text}")
-                        async with ClientSession() as client:
-                            formated_request = {
-                                "status": "request",
-                                "user": current_user,
-                                "data": {
-                                    "type": "text",
-                                    "text": speech_text
-                                }
+                if speech_text:
+                    logger.info(f"Sending message: {speech_text}")
+                    async with ClientSession() as client:
+                        formated_request = {
+                            "status": "request",
+                            "user": current_user,
+                            "data": {
+                                "type": "text",
+                                "text": speech_text
                             }
-                            logger.info(f"Sending request: {formated_request}")
-                            response = await client.post(f"{client_server_route}/send_message/{current_user['_id']}", json=formated_request)
-                            if response is not None:
-                                response_data = await response.json()
-                                if response_data['data']['type'] == "text":
-                                    response_text = response_data['data']['text']
-                                    logger.debug(f"Response text: {response_text}")
-                                    
-                                    if response_text is not None and response_text.lower() != "none":
-                                        await speech.run(response_data["data"]["text"])
+                        }
+                        logger.info(f"Sending request: {formated_request}")
+                        response = await client.post(f"{client_server_route}/send_message/{current_user['_id']}", json=formated_request)
+                        if response is not None:
+                            response_data = await response.json()
+                            if response_data['data']['type'] == "text":
+                                response_text = response_data['data']['text']
+                                logger.info(f"Response text: {response_text}")
+                                
+                                if response_text is not None and response_text.lower() != "none":
+                                    await speech.run(response_data["data"]["text"])
 
             except Exception as e:
                 logger.error(f"Error getting speech: {e}")
-                stop_flag = True
         else:
             stop_flag = True
     except Exception as e:
