@@ -54,14 +54,11 @@ async def main():
             logger.error(f"Error in login: {e}")
             stop_flag = True
 
-        if current_user:
+        while current_user:
             # Start listening
             logger.info("Starting to listen...")
             try:
-                speech_text = await listen.start_transcription()
-            except KeyboardInterrupt:
-                pass
-
+                speech_text = await listen.start()            
                 if speech_text:
                     logger.info(f"Sending message: {speech_text}")
                     async with ClientSession() as client:
@@ -80,10 +77,10 @@ async def main():
                             if response_data['data']['type'] == "text":
                                 response_text = response_data['data']['text']
                                 logger.info(f"Response text: {response_text}")
-                                
                                 if response_text is not None and response_text.lower() != "none":
                                     await speech.run(response_data["data"]["text"])
-
+            except KeyboardInterrupt:
+                pass
             except Exception as e:
                 logger.error(f"Error getting speech: {e}")
         else:

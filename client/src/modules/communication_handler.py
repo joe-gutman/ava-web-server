@@ -1,4 +1,4 @@
-import os, re, time, asyncio
+import os, re, time, asyncio, aioconsole
 from threading import Lock
 from dotenv import load_dotenv
 from signal import SIGTERM, SIGINT
@@ -221,37 +221,55 @@ class ListenHandler_Whisper:
         except Exception as e:
             logger.error(f"Error handling speech: {e}")
 
-
 class ListenHandler_Deepgram:
     def __init__(self):
+        self.keywords = ["ava", "eva"]
         self.deepgram = DeepgramClient()
+        self.sample_rate = 16000
+        self.silence_threshold = 1000 * 1 # milliseconds to wait for silence before ending current transcript
         self.dg_connection = self.deepgram.listen.live.v("1")
-        self.current_transcript = ""
         self.options = LiveOptions(
                 model="nova-2",
                 punctuate=True,
+                smart_format=True,
                 language="en-US",
                 encoding="linear16",
                 channels=1,
-                sample_rate=16000,
-                interim_results=True,
-                utterance_end_ms="1000",
-                vad_events=True,
+                sample_rate=self.sample_rate,
+                # vad_events=True,
+                # interim_results=True,
+                # utterance_end_ms=self.silence_threshold
+                endpointing=int(self.silence_threshold)
             )
+        
+        LiveOptions()
+        self.current_transcript = ""
+
+        self.vad = webrtcvad.Vad()
+        self.vad.set_mode(3)  # Aggressive mode
         self.setup_listeners()
 
     def setup_listeners(self):
+
+        def get_current_transcript():
+            return self.current_transcript
+        
+        def add_current_transcript(string):
+            self.current_transcript += f" {string}"
+
         # Define event handlers
         def on_open(self, event, **kwargs):
             print(f"\n\n{event}\n\n")
 
         def on_message(self, result, **kwargs):
+            # logger.debug(f"Result: {result}")
             sentence = result.channel.alternatives[0].transcript
             if len(sentence) == 0:
                 return
-            else:
-                self.current_transcript += f" {sentence}"
-            print(f"speaker: {sentence}")
+            elif result.is_final:
+                add_current_transcript(f" {sentence}")
+                logger.info(f"speaker: {get_current_transcript()}")
+
 
         def on_metadata(self, metadata, **kwargs):
             print(f"\n\n{metadata}\n\n")
@@ -259,7 +277,6 @@ class ListenHandler_Deepgram:
         def on_speech_started(self, speech_started, **kwargs):
             print(f"\n\n{speech_started}\n\n")
             # Reset the current transcript when speech starts
-            self.current_transcript = ""
 
         def on_error(self, error, **kwargs):
             print(f"\n\n{error}\n\n")
@@ -275,66 +292,63 @@ class ListenHandler_Deepgram:
         self.dg_connection.on(LiveTranscriptionEvents.Error, on_error)
         self.dg_connection.on(LiveTranscriptionEvents.Close, on_close)
 
-    async def detect_speech_with_vad(self):
-        vad = webrtcvad.Vad()
-        vad.set_mode(3)  # Aggressive mode
-        chunk = 320  # 20ms audio chunks for VAD
-
-        p = pyaudio.PyAudio()
-        stream = p.open(format=pyaudio.paInt16,
-                        channels=1,
-                        rate=16000,
-                        input=True,
-                        frames_per_buffer=chunk)
-
-        is_speech = False
-        silence_frames_threshold = int(0.5 * 16000)  # Number of frames for 0.5 seconds
-        silence_frames_count = 0
-
+    async def start(self):
         try:
-            async for data in self.audio_data_generator(stream, chunk):
-                if vad.is_speech(data, sample_rate=16000):
-                    # Speech detected
-                    if not is_speech:
-                        print("--- SPEECH DETECTED ---")
-                        is_speech = True
+            # self.dg_connection.start(self.options)
+            input_task = asyncio.create_task(self.listen_for_exit())
+
+            vad_chunk_size = 320
+            speaking = False
+            silence_count = 0
+
+            p = pyaudio.PyAudio()
+            self.stream = p.open(format=pyaudio.paInt16,
+                            channels=1,
+                            rate=self.sample_rate,
+                            input=True)
+            
+            async for data in self.async_stream_read(self.stream, vad_chunk_size):
+                if self.vad.is_speech(data, self.sample_rate):
+                    silence_count = 0
+                    if not speaking:
                         self.dg_connection.start(self.options)
-                        # Reset the silence frames count
-                        silence_frames_count = 0
+                        speaking = True
+                        logger.debug("[AUDIO FRAME] Speech Detected")
+                    self.dg_connection.send(data)
                 else:
-                    # Silence detected
-                    if is_speech:
-                        silence_frames_count += 1
-                        if silence_frames_count >= silence_frames_threshold:
-                            print("--- SPEECH ENDED ---")
-                            is_speech = False
-                            silence_frames_count = 0
+                    silence_count += len(data) * 1000 / self.sample_rate
+                    if silence_count >= self.silence_threshold:
+                        if speaking:
                             self.dg_connection.finish()
-                            # Reset the silence frames count
+                            speaking = False
 
-        except asyncio.CancelledError:
-            raise  # Re-raise the CancelledError to propagate the cancellation
+                        translated_text = self.current_transcript
+                        self.current_transcript = ""
+                        if len(translated_text) != 0:
+                            if any(keyword.lower() in translated_text.lower() for keyword in self.keywords):
+                                if self.keywords[1].lower() in translated_text.lower():
+                                    translated_text = translated_text.replace(self.keywords[1].lower(), self.keywords[0].lower())
+                                logger.debug(f"Transcript: {self.current_transcript}")
+                                logger.debug("[AUDIO FRAME] Speech NOT Detected")
+                                return translated_text
+        except Exception as e:
+            logger.error(f"Error handling speech to text: {e}")
 
-        finally:
-            # Cleanup
-            stream.stop_stream()
-            stream.close()
-            p.terminate()
-
-    async def audio_data_generator(self, stream, chunk):
+    async def async_stream_read(self, stream, chunk_size):
         while True:
-            data = await self.async_stream_read(stream, chunk)
+            data = stream.read(chunk_size)
             if not data:
                 break
             yield data
 
-    async def async_stream_read(self, stream, chunk):
-        return stream.read(chunk)
-
-    async def start_transcription(self):
-        await self.detect_speech_with_vad()
-
-
+    async def listen_for_exit(self):
+        try:
+            await aioconsole.ainput("Press Enter to exit...")
+        except asyncio.CancelledError:
+            pass  # Task was cancelled
+        finally:
+            print("\nExiting...")
+    
 
 
 class SpeechHandler_XTTS:

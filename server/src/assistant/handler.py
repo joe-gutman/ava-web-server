@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from quart import current_app as app
 from datetime import datetime
 from utils.logger import logger
+from cohere import ChatMessage
 
 load_dotenv()
 
@@ -18,7 +19,7 @@ class Assistant():
         self.tools = self.load_tools()
         self.latest_task = None
         self.message_history = []
-        self.conversation = 'conversation_01'
+        self.conversation_id = str(uuid.uuid4())
         self.co = cohere.Client(os.environ.get('CO_API_KEY'))
 
     def __repr__(self):
@@ -190,6 +191,7 @@ class Assistant():
             "k": 10,
             "model": "command-r",
             "seed": 156354544151,
+            "conversation_id": self.conversation_id
             # "chat_history": self.message_history
         }
 
@@ -200,12 +202,13 @@ class Assistant():
             **send_message_params
         )
         
-        self.message_history.extend(
-                [
-                    {'role': 'USER', 'name': username, 'time_sent':datetime.now(), 'text': message},
-                    {'role': 'Chatbot', 'name': self.name, 'time_sent':datetime.now(), 'text': response.text},
-                ]
-            )
+        # self.message_history.extend(
+        #         [
+        #             {'role':'USER', 'message':message},
+        #             {'role':'CHATBOT', 'message':response.text},
+        #         ]
+        #     )
+            
         
         logger.debug(f"Response: {response}")        
         return response
