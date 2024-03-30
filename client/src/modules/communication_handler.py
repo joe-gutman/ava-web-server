@@ -3,17 +3,21 @@ from threading import Lock
 from dotenv import load_dotenv
 from signal import SIGTERM, SIGINT
 
+
 import numpy as np, pyaudio, boto3
 import speech_recognition as sr, webrtcvad, glob, torch
+import pydantic
 
 from utils.logger import logger
 from TTS.api import TTS
+from elevenlabs import Voice, VoiceSettings, stream
+from elevenlabs.client import ElevenLabs
+import whisper
 from deepgram import (
     DeepgramClient,
     LiveTranscriptionEvents,
     LiveOptions,
 )
-import whisper
 
 load_dotenv()
 
@@ -225,9 +229,16 @@ class ListenHandler_Deepgram:
     def __init__(self):
         self.keywords = ["ava", "eva"]
         self.deepgram = DeepgramClient()
-        self.sample_rate = 16000
-        self.silence_threshold = 1000 * 1 # milliseconds to wait for silence before ending current transcript
+        self.deepgram_connect_status = "closed"
         self.dg_connection = self.deepgram.listen.live.v("1")
+
+        self.buffer_duration = 0.5  # Buffer duration in seconds
+        self.buffer = b''  # Initialize an empty buffer
+        self.audio_queue = []
+        self.sample_rate = 16000
+        self.buffer_length = .5 # seconds of audio stored
+        self.buffer = bytearray()
+        self.silence_threshold = 1000 * 1 # milliseconds to wait for silence before ending current transcript
         self.options = LiveOptions(
                 model="nova-2",
                 punctuate=True,
@@ -237,15 +248,17 @@ class ListenHandler_Deepgram:
                 channels=1,
                 sample_rate=self.sample_rate,
                 # vad_events=True,
-                # interim_results=True,
+                interim_results=True,
                 # utterance_end_ms=self.silence_threshold
                 endpointing=int(self.silence_threshold)
             )
         
         LiveOptions()
+        self.speaking = False
         self.current_transcript = ""
 
         self.vad = webrtcvad.Vad()
+        self.vad_chunk_size = 320
         self.vad.set_mode(3)  # Aggressive mode
         self.setup_listeners()
 
@@ -253,21 +266,32 @@ class ListenHandler_Deepgram:
 
         def get_current_transcript():
             return self.current_transcript
-        
-        def add_current_transcript(string):
+
+        def get_queue_length():
+            return len(self.audio_queue)    
+            
+        def set_current_transcript(string):
             self.current_transcript += f" {string}"
 
-        # Define event handlers
+        def open_deepgram_connect_status():
+            self.deepgram_connect_status = "open"
+
+        def close_deepgram_connect_status():
+            self.deepgram_connect_status = "closed"
+
+        # ------------------------------ Event Handlers ------------------------------ #
         def on_open(self, event, **kwargs):
             print(f"\n\n{event}\n\n")
+            # open_deepgram_connect_status()
 
         def on_message(self, result, **kwargs):
             # logger.debug(f"Result: {result}")
             sentence = result.channel.alternatives[0].transcript
+            logger.debug(f"Heard: {sentence}")
             if len(sentence) == 0:
                 return
             elif result.is_final:
-                add_current_transcript(f" {sentence}")
+                set_current_transcript(f" {sentence}")
                 logger.info(f"speaker: {get_current_transcript()}")
 
 
@@ -283,6 +307,7 @@ class ListenHandler_Deepgram:
 
         def on_close(self, close, **kwargs):
             print(f"\n\n{close}\n\n")
+            # asyncio.run(close_deepgram_connect_status())
 
         # Assign event handlers
         self.dg_connection.on(LiveTranscriptionEvents.Open, on_open)
@@ -294,11 +319,6 @@ class ListenHandler_Deepgram:
 
     async def start(self):
         try:
-            # self.dg_connection.start(self.options)
-            input_task = asyncio.create_task(self.listen_for_exit())
-
-            vad_chunk_size = 320
-            speaking = False
             silence_count = 0
 
             p = pyaudio.PyAudio()
@@ -307,20 +327,27 @@ class ListenHandler_Deepgram:
                             rate=self.sample_rate,
                             input=True)
             
-            async for data in self.async_stream_read(self.stream, vad_chunk_size):
+            async for data in self.async_stream_read(self.stream, self.vad_chunk_size):
+                if len(self.buffer) > self.sample_rate * self.buffer_length:
+                    self.buffer = bytearray()
+                self.buffer.extend(data)
+
                 if self.vad.is_speech(data, self.sample_rate):
+                    self.audio_queue.append(data)
                     silence_count = 0
-                    if not speaking:
-                        self.dg_connection.start(self.options)
-                        speaking = True
-                        logger.debug("[AUDIO FRAME] Speech Detected")
-                    self.dg_connection.send(data)
+                    if not self.speaking:
+                        await self.start_dg_connection()
+
+                    while len(self.buffer) > 0:
+                        logger.debug(f"Audio Chunk Sent")
+                        self.dg_connection.send(self.buffer)
+                        self.buffer = bytearray()
                 else:
                     silence_count += len(data) * 1000 / self.sample_rate
                     if silence_count >= self.silence_threshold:
-                        if speaking:
+                        if self.speaking:
                             self.dg_connection.finish()
-                            speaking = False
+                            self.speaking = False
 
                         translated_text = self.current_transcript
                         self.current_transcript = ""
@@ -332,7 +359,12 @@ class ListenHandler_Deepgram:
                                 logger.debug("[AUDIO FRAME] Speech NOT Detected")
                                 return translated_text
         except Exception as e:
-            logger.error(f"Error handling speech to text: {e}")
+            logger.error(f"Error handling speech to text: {e}")        
+
+    async def start_dg_connection(self):
+        self.dg_connection.start(self.options)
+        self.speaking = True
+        logger.debug("[AUDIO FRAME] Speech Detected")
 
     async def async_stream_read(self, stream, chunk_size):
         while True:
@@ -457,6 +489,7 @@ class SpeechHandler_XTTS:
         )
 
 class SpeechHandler_Polly:
+
     def __init__(self, region_name='us-east-1'):
         self.script_dir = os.path.dirname(__file__)
         self.polly_client = boto3.client('polly', 
@@ -486,3 +519,62 @@ class SpeechHandler_Polly:
 
     async def run(self, text):
         await self.convert_tts(text)
+
+
+class SpeechHandler_ElevenLabs:
+    """
+    This is a text to speech module using ElevenLab's Voice API. It is used to convert text to speech and play the audio stream.
+    Input: text string
+    Input:
+        text: (str) - The text to be converted to speech
+        voice: (str) - The name of the voice to be used for the speech
+    """
+    def __init__(self):
+        self.client = ElevenLabs(
+            api_key=os.environ.get("ELEVENLABS_API_KEY")
+        )
+
+        self.model = 'eleven_turbo_v2'
+        # self.model = 'eleven_multilingual_v2'
+        self.voices = {
+            'Rachel':'21m00Tcm4TlvDq8ikWAM', 
+            'Sarah':'EXAVITQu4vr4xnSDxMaL', 
+            'Matilda':'XrExE9yKIg1WjnnlVkGX', 
+            'Nicole':'piTKgcLEGmPE4e6mEKli',
+            'Maya':'SeF28OCtyrmtk1Z29z6b',
+            'Julia':'yssiWZPp27siJ0howQ4z',
+            'Joanne': 'xYksD5PsEyPnJJEqJsMC'
+        }
+        self.chosen_voice = 'Maya'
+
+    async def text_to_speech(self, text, voice):
+        try:
+            logger.info(f'Text to speech: {text}')
+
+            logger.debug(f'Voice: {self.voices[self.chosen_voice]}, ID: {self.chosen_voice}')
+            audio_stream = self.client.generate(
+                text=text,
+                voice=Voice(
+                    voice_id=self.voices[self.chosen_voice],
+                    name=self.chosen_voice,
+                    category='premade',
+                    settings=VoiceSettings(
+                        stability=0.5,
+                        similarity_boost=0.5,
+                        style=0.0,
+                        use_speaker_boost=False
+                    )
+                ),
+                model=self.model,
+                stream=True
+            )
+
+            stream(audio_stream)
+            logger.info(f'Speech generated')
+        except Exception as e:
+            logger.error(f'Error in text_to_speech: {e}')
+            raise Exception("Error in text_to_speech: " + str(e))
+        
+    async def run(self, text, voice=None):
+        await self.text_to_speech(text, voice)
+        

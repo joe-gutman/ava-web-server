@@ -3,7 +3,7 @@ import asyncio
 import signal
 import os
 import pygame
-import traceback
+from transformers import AutoTokenizer
 from dotenv import load_dotenv
 from utils.logger import logger
 from modules.communication_handler import ListenHandler_Google
@@ -11,6 +11,7 @@ from modules.communication_handler import ListenHandler_Whisper
 from modules.communication_handler import ListenHandler_Deepgram
 from modules.communication_handler import SpeechHandler_XTTS
 from modules.communication_handler import SpeechHandler_Polly
+from modules.communication_handler import SpeechHandler_ElevenLabs
 
 
 
@@ -35,7 +36,9 @@ async def main():
     client_server_route = "http://10.0.0.229:5001/"
     # listen = ListenHandler_Deepgram()
     listen = ListenHandler_Deepgram()
-    speech = SpeechHandler_Polly()
+    speech_elevenlabs = SpeechHandler_ElevenLabs()
+    speech_polly = SpeechHandler_Polly()
+    tokenizer = AutoTokenizer.from_pretrained("distilbert-base-cased")
 
     # login on the server
     try:
@@ -78,7 +81,13 @@ async def main():
                                 response_text = response_data['data']['text']
                                 logger.info(f"Response text: {response_text}")
                                 if response_text is not None and response_text.lower() != "none":
-                                    await speech.run(response_data["data"]["text"])
+                                    text_token_count = len(tokenizer.tokenize(response_text))
+
+                                    logger.debug(f"Text token count: {text_token_count}")
+                                    if text_token_count > 35:
+                                        await speech_polly.run(response_text)
+                                    else:
+                                        await speech_elevenlabs.run(response_text)
             except KeyboardInterrupt:
                 pass
             except Exception as e:
