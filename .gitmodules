@@ -1,3 +1,0 @@
-[submodule "src/assistant/models/Wizard-Vicuna-13B-Uncensored-GPTQ"]
-    path = server/src/assistant/models/Wizard-Vicuna-13B-Uncensored-GPTQ
-    url = https://huggingface.co/TheBloke/Wizard-Vicuna-13B-Uncensored-GPTQ
