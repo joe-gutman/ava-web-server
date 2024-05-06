@@ -1,0 +1,19 @@
+services:
+  server:
+    build:
+      context: .
+    ports:
+      - "8000:5000"
+    image: ava-web-server:dev
+    volumes:
+      - ./logs:/app/logs
+    user: "appuser:applogs"
+    env_file:
+      - .env
+    container_name: ava-web-server
+    networks:
+      - windows-wsl-connection
+
+networks:
+  windows-wsl-connection:
+    driver: bridge

@@ -1,7 +1,6 @@
 import os
 import logging
 
-
 class PathnameFilter(logging.Filter):
     def filter(self, record):
         pathname = record.pathname
@@ -20,7 +19,13 @@ def get_logger(name, file_log_level="INFO", terminal_log_level="INFO"):
     logger = logging.getLogger(name)
     logger.setLevel(min(file_log_level, terminal_log_level))  # Set to the lower of the two log levels
 
-    file_handler = logging.FileHandler('./logs/server_debug.log')
+    # Update the log file path to match your directory structure
+    log_directory = os.path.join(os.getcwd(), 'logs')
+    if not os.path.exists(log_directory):
+        os.makedirs(log_directory)
+    log_file_path = os.path.join(log_directory, 'server_debug.log')
+
+    file_handler = logging.FileHandler(log_file_path)
     file_handler.setLevel(file_log_level)
 
     stream_handler = logging.StreamHandler()

@@ -1,5 +1,5 @@
 {
-	"model_name": "c4ai-command-r-v01-4bit",
+	"model_name": "command-r-plus",
 	"assistant_name": "Ava",
 	"modules": {
 		"trigger": {
