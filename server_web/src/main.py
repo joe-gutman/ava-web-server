@@ -14,6 +14,8 @@ from modules.tools.routes import bp as tools_bp
 from db_connection import connect_to_db
 
 app = Quart(__name__)
+app.config['DEBUG'] = True
+host_ip = os.environ.get('QUART_APP_HOST', '0.0.0.0')
 
 load_dotenv()
 
@@ -27,7 +29,6 @@ async def startup():
 
 
     try:
-        logger.debug("Connecting to database...")
         app.db = await connect_to_db()
         logger.info("Connected to database: " + app.db.name)
     except Exception as e:
@@ -51,4 +52,4 @@ def signal_handler(sig, frame):
 signal.signal(signal.SIGINT, signal_handler)
 
 if __name__ == "__main__":
-    app.run()
+    app.run(host=host_ip)

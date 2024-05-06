@@ -1,1 +1,7 @@
-
+cohere
+quart
+python-dotenv
+motor
+httpx
+requests
+bcrypt

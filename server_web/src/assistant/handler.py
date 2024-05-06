@@ -4,13 +4,10 @@ import os
 import time
 import json
 import importlib
-from dotenv import load_dotenv
 from quart import current_app as app
 from datetime import datetime
 from utils.logger import logger
 from cohere import ChatMessage
-
-load_dotenv()
 
 class Assistant():
     def __init__(self):
@@ -189,7 +186,7 @@ class Assistant():
             'tools': self.tools['all_call_formats'],
             "temperature": 0.9,
             "k": 10,
-            "model": "command-r",
+            "model": self.model_name,
             "seed": 156354544151,
             "conversation_id": self.conversation_id
             # "chat_history": self.message_history
