@@ -4,6 +4,7 @@ import sys
 import json
 import signal
 from quart import Quart
+from quart_cors import cors
 from dotenv import load_dotenv
 from utils.logger import logger
 from assistant.handler import Assistant
@@ -14,8 +15,17 @@ from modules.tools.routes import bp as tools_bp
 from db_connection import connect_to_db
 
 app = Quart(__name__)
+cors_settings = {
+    "allow_origin": "http://localhost:3000",
+    "allow_credentials": True,
+    "allow_methods": ["GET", "POST"],
+    "allow_headers": ["Content-Type"], 
+}
+
+# Apply CORS settings to the Quart app
+app = cors(app, **cors_settings)
 app.config['DEBUG'] = True
-host_ip = os.environ.get('QUART_APP_HOST', '0.0.0.0')
+
 
 load_dotenv()
 
@@ -52,4 +62,4 @@ def signal_handler(sig, frame):
 signal.signal(signal.SIGINT, signal_handler)
 
 if __name__ == "__main__":
-    app.run(host=host_ip)
+    app.run()

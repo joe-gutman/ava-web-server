@@ -12,8 +12,9 @@ async def my_route_handler(json_data):
     # Handle the route
     pass
 """
+from quart import request, jsonify
 from functools import wraps
-from quart import request
+from utils.logger import logger
 
 def route_with_req(bp, path, methods=None):
     def decorator(f):
@@ -21,6 +22,14 @@ def route_with_req(bp, path, methods=None):
         @wraps(f)
         async def decorated_function(*args, **kwargs):
             json_data = await request.get_json()
-            return await f(json_data, *args, **kwargs)
+            logger.debug('JSON DATA:', json_data)
+            result = await f(json_data, *args, **kwargs)
+            
+            response = jsonify(result)
+            print('RESPONSE:', result)
+            response.headers.add('Access-Control-Allow-Origin', 'http://localhost:3000')
+            
+            return response
         return decorated_function
     return decorator
+
