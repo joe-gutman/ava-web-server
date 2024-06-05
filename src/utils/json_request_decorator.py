@@ -25,11 +25,11 @@ def route_with_req(bp, path, methods=None):
             logger.debug('JSON DATA:', json_data)
             result = await f(json_data, *args, **kwargs)
             
-            response = jsonify(result)
-            print('RESPONSE:', result)
-            response.headers.add('Access-Control-Allow-Origin', 'http://localhost:3000')
+            # response = jsonify(result)
+            # print('RESPONSE:', result)
+            # response.headers.add('Access-Control-Allow-Origin', 'http://localhost:3000')
             
-            return response
+            return result
         return decorated_function
     return decorator
 
